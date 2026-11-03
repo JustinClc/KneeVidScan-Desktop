@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { QuestionnaireAnswers } from './lib/questionnaire';
 
 export type BackendInfo = {
   apiBase: string;
@@ -27,6 +28,7 @@ export type SaveSubjectFolderInput = {
   heightCm: string;
   weightKg: string;
   destination: 'existing' | 'new';
+  folder?: string;
   dialogTitle?: string;
   buttonLabel?: string;
 };
@@ -49,14 +51,34 @@ export type SaveSubjectFolderResult =
       folder?: string;
     };
 
+export type SaveQuestionnaireResult =
+  | { ok: true; folder: string }
+  | { ok: false; cancelled?: boolean; error: string };
+
+export type ExportReportInput = {
+  folder: string;
+  filename: string;
+  html: string;
+};
+
+export type ExportReportResult =
+  | { ok: true; path: string; openError?: string }
+  | { ok: false; error: string };
+
 export type MotusCapLiteApi = {
+  exportReport?: (input: ExportReportInput) => Promise<ExportReportResult>;
+  saveQuestionnaire?: (
+    answers: QuestionnaireAnswers,
+    title?: string,
+    buttonLabel?: string,
+  ) => Promise<SaveQuestionnaireResult>;
   chooseSaveFolder: (
     title?: string,
     buttonLabel?: string,
   ) => Promise<string | null>;
   /**
-   * Ask for the subject folder and write the posture photos plus the subject
-   * CSV from the in-memory store. Present in the desktop app.
+   * Write annotated report photos, clean originals and the subject CSV.
+   * With folder supplied, reuse the questionnaire folder without a dialog.
    */
   saveSubjectFolder?: (
     input: SaveSubjectFolderInput,
@@ -75,6 +97,9 @@ export type MotusCapLiteApi = {
 };
 
 const api: MotusCapLiteApi = {
+  exportReport: (input) => ipcRenderer.invoke('report:export', input),
+  saveQuestionnaire: (answers, title, buttonLabel) =>
+    ipcRenderer.invoke('save:questionnaire', answers, title, buttonLabel),
   chooseSaveFolder: (title, buttonLabel) =>
     ipcRenderer.invoke('dialog:chooseSaveFolder', title, buttonLabel),
   saveSubjectFolder: (input) => ipcRenderer.invoke('save:subjectFolder', input),

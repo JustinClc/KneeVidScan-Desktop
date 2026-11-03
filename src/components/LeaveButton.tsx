@@ -28,6 +28,8 @@ export function LeaveButton({
   beforeLeave,
   testId,
   className = 'btn btn-ghost',
+  suffix,
+  disabled = false,
 }: {
   label: string;
   target: ScreenId;
@@ -36,8 +38,10 @@ export function LeaveButton({
   beforeLeave?: () => void | Promise<void>;
   testId: string;
   className?: string;
+  suffix?: ReactNode;
+  disabled?: boolean;
 }) {
-  const { go } = useSession();
+  const { go, openCameraPairing } = useSession();
   const { t } = useLocale();
   const group = useContext(LeaveGroupContext);
   const [localOpen, setLocalOpen] = useState(false);
@@ -48,14 +52,15 @@ export function LeaveButton({
     else setLocalOpen(next);
   };
 
+  const navigate = () => (target === 2 ? openCameraPairing() : go(target));
   const leave = () => {
     setOpen(false);
     const pending = beforeLeave?.();
     if (pending instanceof Promise) {
-      void pending.then(() => go(target));
+      void pending.then(navigate);
       return;
     }
-    go(target);
+    navigate();
   };
 
   if (open) {
@@ -89,12 +94,14 @@ export function LeaveButton({
       className={className}
       type="button"
       data-testid={testId}
+      disabled={disabled}
       onClick={() => {
         if (busy) setOpen(true);
         else leave();
       }}
     >
       {t(label)}
+      {suffix}
     </button>
   );
 }

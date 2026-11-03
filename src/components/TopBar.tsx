@@ -1,5 +1,7 @@
+import logo from '../../assets/branding/kneevidscan.png';
+import { useLocale } from '../lib/useLocale';
 import { Stepper } from './Stepper';
-import { UPLOAD_STEP_SCREENS, UPLOAD_STEPS, type ScreenId } from '../lib/steps';
+import type { ScreenId } from '../lib/steps';
 import type { SessionFlow } from '../state/SessionContext';
 
 export function TopBar({
@@ -9,22 +11,14 @@ export function TopBar({
   screen: ScreenId;
   flow: SessionFlow;
 }) {
-  const uploadRail =
-    flow === 'upload' &&
-    (UPLOAD_STEP_SCREENS as readonly ScreenId[]).includes(screen);
+  const { t } = useLocale();
   return (
     <div className="topbar">
       <div className="logo">
-        Motus<span>Cap</span> <em className="lite">Lite</em>
+        <img className="app-logo" src={logo} alt="" />
+        {t('KneeVidScan-Desktop')}
       </div>
-      {flow === 'record' ? <Stepper current={screen} /> : null}
-      {uploadRail ? (
-        <Stepper
-          current={screen}
-          steps={UPLOAD_STEPS}
-          screens={UPLOAD_STEP_SCREENS}
-        />
-      ) : null}
+      {flow === 'record' && screen !== 2 ? <Stepper current={screen} /> : null}
     </div>
   );
 }

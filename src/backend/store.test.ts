@@ -78,6 +78,23 @@ describe('LiteStore pairing + sync', () => {
     expect(store.deviceCount()).toBe(1);
   });
 
+  it('uses a five-second shared start and twenty-second limit for sit-to-stand', () => {
+    store.createPairing();
+    store.mockCompleteActivePairing();
+    const trial = store.createTrial('sit01');
+    const before = Date.now();
+    const signal = store.startTrial(trial.id, {
+      leadMs: 5000,
+      maxDurationMs: 20000,
+    });
+    expect(signal?.startAtMs).toBeGreaterThanOrEqual(before + 5000);
+    expect(signal?.startAtMs).toBeLessThanOrEqual(Date.now() + 5000);
+    expect(signal?.maxDurationMs).toBe(20000);
+    expect(store.trials.get(trial.id)?.participants).toEqual(
+      store.devices.map((d) => d.deviceId),
+    );
+  });
+
   it('broadcasts a shared start signal for a trial', () => {
     const trial = store.createTrial('gait01');
     store.armTrial(trial.id);
@@ -322,5 +339,47 @@ describe('LiteStore recording quality session settings', () => {
     if (!repl.ok) return;
     store.completePairing(repl.pairing.id, { code: repl.code });
     expect(store.linkProbes.has(againId)).toBe(false);
+  });
+});
+
+describe('mixed USB and wireless cameras', () => {
+  function makeStore() {
+    const store = new LiteStore();
+    store.setInfo({
+      apiBase: 'http://127.0.0.1:9000',
+      pwaBase: 'http://127.0.0.1:9000/pwa/',
+      https: false,
+      lanHost: '127.0.0.1',
+      port: 9000,
+    });
+    return store;
+  }
+  it('shares the three slots, view roles and trial participants with wireless phones', () => {
+    const store = makeStore();
+    const usb = store.connectUsbCamera('usb-a', 'USB front');
+    expect(usb.ok).toBe(true);
+    if (!usb.ok) return;
+    expect(store.authDevice(usb.devicePairingToken)?.source).toBe('usb');
+    const phone = store.createPairing();
+    if (!phone.ok) throw new Error(phone.error);
+    expect(store.completePairing(phone.pairing.id).ok).toBe(true);
+    expect(store.connectUsbCamera('usb-b', 'USB side').ok).toBe(true);
+    expect(store.devices.map((d) => d.viewCode)).toEqual(['F', 'L', 'O']);
+    const trial = store.createTrial('mixed');
+    store.armTrial(trial.id);
+    store.startTrial(trial.id);
+    expect(trial.participants).toEqual(store.devices.map((d) => d.deviceId));
+    expect(store.connectUsbCamera('usb-c', 'Fourth').ok).toBe(false);
+    expect(store.connectUsbCamera('usb-a', 'Duplicate').ok).toBe(false);
+    expect(store.devices).toHaveLength(3);
+    expect(store.removeDevice(usb.deviceId)).toBe(true);
+    expect(store.authDevice(usb.devicePairingToken)).toBeNull();
+  });
+  it('keeps an active wireless QR reserved and rejects an empty camera ID', () => {
+    const store = makeStore();
+    expect(store.connectUsbCamera('', 'USB').ok).toBe(false);
+    expect(store.createPairing().ok).toBe(true);
+    expect(store.connectUsbCamera('usb-a', 'USB').ok).toBe(false);
+    expect(store.devices).toHaveLength(0);
   });
 });

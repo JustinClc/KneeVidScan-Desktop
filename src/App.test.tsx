@@ -264,7 +264,7 @@ const { mockClient, devices, resetMock, uploads, pairingPublicBases } =
         ok: true,
         files: (['F', 'LL', 'RL'] as const).map(
           (c) =>
-            `${body.subjectId}_${(body.subjectName || 'X').replace(/\s+/g, '-')}_standing_${c}.png`,
+            `${body.subjectId}_${(body.subjectName || 'X').replace(/\s+/g, '-')}_standing_${c}_annotated.png`,
         ),
       }),
       setStandingMode: async (_id: string, active: boolean) => ({
@@ -352,15 +352,41 @@ const liveModel = vi.hoisted(() => ({
 }));
 
 // No WASM in CI — Subject falls back to manual Capture now.
+vi.mock('./lib/standingReview', () => ({
+  standingReviewUrl: () => 'data:image/png;base64,cmV2aWV3',
+}));
+
 vi.mock('./lib/mediapipePose', () => ({
   loadStandingLandmarker: async () => null,
   loadLiveLandmarker: async () => liveModel.current,
 }));
 
-describe('MotusCap Lite Phase 1 shell', () => {
+// App-level workflow tests inject detector results; the gate and timing are
+// exercised separately in Capture.test.tsx and sitToStand.test.ts.
+const captureGate = vi.hoisted(() => ({
+  onCheck: undefined as
+    | undefined
+    | ((check: import('./lib/sitToStand').SittingCheck) => void),
+}));
+vi.mock('./components/CamFeed', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./components/CamFeed')>();
+  return {
+    ...actual,
+    CamGrid: (props: React.ComponentProps<typeof actual.CamGrid>) => {
+      captureGate.onCheck = props.onSittingCheck;
+      return <actual.CamGrid {...props} onSittingCheck={undefined} />;
+    },
+  };
+});
+
+describe('KneeVidScan-Desktop Phase 1 shell', () => {
   beforeEach(() => {
     resetMock();
     window.motuscapLite = {
+      saveQuestionnaire: async () => ({
+        ok: true as const,
+        folder: '/tmp/motuscap-lite-save',
+      }),
       chooseSaveFolder: async () => '/tmp/motuscap-lite-save',
       writeSaveFiles: async (folder, files) => ({
         ok: true,
@@ -380,18 +406,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
     };
   });
 
-  function fillIfBlank(testId: string, value: string) {
-    const el = screen.getByTestId(testId) as HTMLInputElement;
-    if (!el.value.trim()) {
-      fireEvent.change(el, { target: { value } });
-    }
-  }
-
   async function finishPostures() {
-    fillIfBlank('subject-id', 'UG0001');
-    fillIfBlank('subject-name', 'Chan Tai Man');
-    fillIfBlank('subject-height', '172');
-    fillIfBlank('subject-weight', '68');
     const demo = document.querySelector(
       '[data-testid="subject-demo-complete"]',
     );
@@ -401,44 +416,41 @@ describe('MotusCap Lite Phase 1 shell', () => {
     fireEvent.click(demo);
   }
 
-  async function chooseSubjectFolder(mode: 'existing' | 'new') {
-    await waitFor(() =>
-      expect(screen.getByTestId('subject-folder-choice')).toBeInTheDocument(),
-    );
-    const choice = screen.getByTestId('subject-folder-choice');
-    expect(
-      within(choice)
-        .getAllByRole('button')
-        .map((button) => button.getAttribute('data-testid')),
-    ).toEqual([
-      'subject-folder-new',
-      'subject-folder-existing',
-      'subject-folder-cancel',
-    ]);
-    expect(screen.getByTestId('subject-folder-new')).toHaveClass('btn-primary');
-    expect(screen.getByTestId('subject-folder-existing')).toHaveClass(
-      'btn-secondary',
-    );
-    fireEvent.click(
-      screen.getByTestId(
-        mode === 'new' ? 'subject-folder-new' : 'subject-folder-existing',
-      ),
-    );
+  async function completeQuestionnaire() {
+    const form = screen.getByTestId('screen-session');
+    for (const [label, value] of [
+      ['Name/SID', 'UG0001'],
+      ['Age', '45'],
+      ['Height (m)', '1.72'],
+      ['Weight (kg)', '68'],
+    ]) {
+      fireEvent.change(within(form).getByLabelText(label), {
+        target: { value },
+      });
+    }
+    for (const group of within(form).getAllByRole('group')) {
+      fireEvent.click(within(group).getAllByRole('radio')[0]);
+    }
+    await act(async () => {
+      fireEvent.click(within(form).getByRole('button', { name: 'Submit' }));
+    });
   }
 
-  function renderRecordApp() {
+  async function continueFromPair() {
+    fireEvent.click(screen.getByTestId('pair-continue'));
+    if (screen.queryByTestId('screen-cover'))
+      fireEvent.click(screen.getByTestId('cover-start-recording'));
+    if (screen.queryByTestId('screen-session')) await completeQuestionnaire();
+  }
+
+  function renderPairApp() {
     const view = render(<App />);
-    fireEvent.click(screen.getByTestId('cover-start-recording'));
+    fireEvent.click(screen.getByTestId('home-pair-cameras'));
     return view;
   }
 
   async function goToSubject(cams = 1) {
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
+    renderPairApp();
     await waitFor(() =>
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
     );
@@ -449,10 +461,10 @@ describe('MotusCap Lite Phase 1 shell', () => {
       );
       fireEvent.click(screen.getByTestId('pair-simulate'));
       await waitFor(() =>
-        expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
+        expect(screen.queryByTestId('qr-box')).not.toBeInTheDocument(),
       );
     }
-    fireEvent.click(screen.getByTestId('pair-continue'));
+    await continueFromPair();
     expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
   }
 
@@ -463,45 +475,44 @@ describe('MotusCap Lite Phase 1 shell', () => {
       expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
     );
     fireEvent.click(screen.getByTestId('subject-continue'));
-    await chooseSubjectFolder('existing');
+
     await waitFor(() =>
       expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
     );
+    await showCapturePreview();
   }
 
-  it('opens on Cover with two entry cards and no stepper', () => {
+  async function showCapturePreview() {
+    const proceed = screen.queryByTestId('capture-proceed');
+    if (proceed) await act(async () => fireEvent.click(proceed));
+  }
+
+  async function startCapture() {
+    await showCapturePreview();
+    await act(async () =>
+      captureGate.onCheck?.({ ready: true, message: 'Position ready.' }),
+    );
+  }
+
+  it('opens on Home with assessment and camera buttons and a no-camera warning', () => {
     render(<App />);
-    expect(screen.getByTestId('screen-cover')).toBeInTheDocument();
+    const home = within(screen.getByTestId('screen-cover'));
     expect(
-      screen.getByRole('heading', { name: 'MotusCap Lite' }),
+      home.getByRole('heading', { name: 'KneeVidScan-Desktop' }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText('Motion capture for lab sessions'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Record and analyse motion' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Pair cameras, take standing postures, record trials, then run pose estimation.',
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', {
-        name: 'Upload an existing MP4',
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Import one motion video for pose analysis without a live capture.',
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('cover-start-recording')).toHaveTextContent(
-      'Start recording',
+    expect(home.getByRole('img', { name: 'KneeVidScan logo' })).toHaveAttribute(
+      'src',
+      expect.stringContaining('kneevidscan.png'),
     );
-    expect(screen.getByTestId('cover-upload-media')).toHaveTextContent(
-      'Upload media',
+    expect(home.getByRole('button', { name: 'Start Assessment' })).toBe(
+      screen.getByTestId('cover-start-recording'),
     );
+    expect(home.getAllByRole('button')).toHaveLength(2);
+    expect(screen.getByTestId('home-pair-cameras')).toHaveTextContent(
+      '!No camera paired',
+    );
+    expect(home.queryByText('Upload an existing MP4')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('cover-upload-media')).not.toBeInTheDocument();
     expect(screen.queryByTestId('stepper')).not.toBeInTheDocument();
     expect(screen.queryByTestId('screen-session')).not.toBeInTheDocument();
   });
@@ -515,389 +526,182 @@ describe('MotusCap Lite Phase 1 shell', () => {
     expect(select).toHaveTextContent('简体中文');
     fireEvent.change(select, { target: { value: 'zh-Hant' } });
     expect(screen.getByTestId('cover-start-recording')).toHaveTextContent(
-      '開始錄製',
+      '開始',
     );
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      'MotusCap Lite',
+      '膝關照-桌面版',
+    );
+    expect(document.title).toBe('膝關照-桌面版');
+    expect(document.querySelector('.topbar .logo')).toHaveTextContent(
+      '膝關照-桌面版',
     );
     fireEvent.click(screen.getByTestId('cover-start-recording'));
-    expect(screen.getByTestId('stepper')).toHaveTextContent('新時段');
+    expect(screen.getByTestId('stepper')).toHaveTextContent('健康問卷');
     unmount();
     render(<App />);
     expect(screen.getByTestId('locale-select')).toHaveValue('zh-Hant');
     expect(screen.getByTestId('cover-start-recording')).toHaveTextContent(
-      '開始錄製',
+      '開始',
     );
     fireEvent.change(screen.getByTestId('locale-select'), {
       target: { value: 'zh-Hans' },
     });
     expect(screen.getByTestId('cover-start-recording')).toHaveTextContent(
-      '开始录制',
+      '开始',
     );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      '膝關照-桌面版',
+    );
+    fireEvent.change(screen.getByTestId('locale-select'), {
+      target: { value: 'en' },
+    });
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'KneeVidScan-Desktop',
+    );
+    expect(document.title).toBe('KneeVidScan-Desktop');
   });
 
-  it('Start recording opens New Session with the stepper on step 1', () => {
+  it('Start opens the questionnaire without cameras and pairing is outside the stepper', async () => {
     render(<App />);
     fireEvent.click(screen.getByTestId('cover-start-recording'));
     expect(screen.getByTestId('screen-session')).toBeInTheDocument();
     expect(screen.queryByTestId('screen-cover')).not.toBeInTheDocument();
-    const stepper = screen.getByTestId('stepper');
-    expect(stepper.querySelector('.step.active')).toHaveTextContent(
-      '1 New Session',
+    expect(
+      screen.getByTestId('stepper').querySelector('.step.active'),
+    ).toHaveTextContent('1 Health questionnaire');
+    expect(screen.getByTestId('stepper')).not.toHaveTextContent('Pair cameras');
+    expect(screen.getByTestId('questionnaire-pair-cameras')).toHaveTextContent(
+      'No camera paired',
     );
     expect(screen.queryByTestId('screen-pair')).not.toBeInTheDocument();
+    await completeQuestionnaire();
+    expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
+    expect(screen.getByTestId('subject-continue')).toBeDisabled();
+    expect(
+      screen.queryByTestId('standing-capture-now'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('subject-back-pairing')).toHaveTextContent(
+      'No camera paired',
+    );
   });
 
-  it('returns to Cover from New Session and from Pair cameras', () => {
-    render(<App />);
-    fireEvent.click(screen.getByTestId('cover-start-recording'));
-    fireEvent.click(screen.getByTestId('session-home'));
-    expect(screen.getByTestId('screen-cover')).toBeInTheDocument();
+  it('returns to Home from camera settings even when no cameras are connected', () => {
+    renderPairApp();
     expect(screen.queryByTestId('stepper')).not.toBeInTheDocument();
-    expect(screen.getByTestId('cover-upload-media')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('cover-start-recording'));
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
+    expect(screen.getByTestId('pair-continue')).toHaveTextContent('Done');
+    expect(screen.getByTestId('pair-continue')).toBeEnabled();
+    fireEvent.click(screen.getByTestId('pair-continue'));
+    expect(screen.getByTestId('screen-cover')).toBeInTheDocument();
+    expect(screen.getByTestId('home-pair-cameras')).toHaveTextContent(
+      'No camera paired',
     );
+  });
+
+  it('keeps cameras and assessment details when returning to Home and the questionnaire', async () => {
+    await goToSubject();
+    fireEvent.click(screen.getByTestId('subject-back-pairing'));
     expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('pair-home'));
     expect(screen.getByTestId('screen-cover')).toBeInTheDocument();
-    expect(screen.queryByTestId('stepper')).not.toBeInTheDocument();
-    expect(screen.getByTestId('cover-start-recording')).toBeInTheDocument();
+    expect(screen.getByTestId('home-pair-cameras')).not.toHaveTextContent(
+      'No camera paired',
+    );
+    fireEvent.click(screen.getByTestId('cover-start-recording'));
+    expect(screen.getByLabelText('Name/SID')).toHaveValue('UG0001');
+    fireEvent.click(screen.getByTestId('questionnaire-pair-cameras'));
+    expect(screen.getByTestId('pair-summary')).toHaveTextContent(
+      '1 camera ready',
+    );
+    fireEvent.click(screen.getByTestId('pair-continue'));
+    expect(screen.getByTestId('screen-session')).toBeInTheDocument();
+    expect(screen.getByLabelText('Height (m)')).toHaveValue('1.72');
+    expect(
+      screen.getByTestId('questionnaire-pair-cameras'),
+    ).not.toHaveTextContent('No camera paired');
   });
 
-  it('Upload media walks Upload, Review, and Pose and leaves Record cameras alone', async () => {
-    type ImportBody = {
-      trialName: string;
-      filename: string;
-      fresh?: boolean;
-      trialId?: string;
-      onProgress?: (fraction: number) => void;
-    };
-    const pending: { release: (() => void) | null } = { release: null };
-    const imported = vi.fn(
-      (body: ImportBody) =>
-        new Promise<{
-          ok: true;
-          trial_id: string;
-          name: string;
-          duration_sec: number;
-          device_id: string;
-          cam_index: number;
-          view_code: null;
-          filename: string;
-          bytes: number;
-          devices: Array<{
-            device_id: string;
-            name: string;
-            cam_index: number;
-            view_code: null;
-          }>;
-        }>((resolve) => {
-          body.onProgress?.(0.4);
-          pending.release = () =>
-            resolve({
-              ok: true,
-              trial_id: body.trialId ?? 'tr_import',
-              name: body.trialName,
-              duration_sec: 2.5,
-              device_id: 'dev_a',
-              cam_index: 0,
-              view_code: null,
-              filename: body.filename,
-              bytes: 8,
-              devices: [
-                {
-                  device_id: 'dev_a',
-                  name: body.filename,
-                  cam_index: 0,
-                  view_code: null,
-                },
-              ],
-            });
-        }),
+  it('preserves a partially completed questionnaire and the no-camera warning through camera settings', () => {
+    render(<App />);
+    fireEvent.click(screen.getByTestId('cover-start-recording'));
+    fireEvent.change(screen.getByLabelText('Name/SID'), {
+      target: { value: 'Draft P001' },
+    });
+    fireEvent.change(screen.getByLabelText('Height (m)'), {
+      target: { value: '1.65' },
+    });
+    const form = screen.getByTestId('screen-session');
+    fireEvent.click(screen.getByTestId('questionnaire-pair-cameras'));
+    expect(form).not.toBeVisible();
+    expect(screen.getByTestId('screen-pair')).toBeVisible();
+    expect(screen.queryByTestId('stepper')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pair-continue'));
+    expect(screen.getByTestId('screen-session')).toBe(form);
+    expect(form).toBeVisible();
+    expect(screen.getByLabelText('Name/SID')).toHaveValue('Draft P001');
+    expect(screen.getByLabelText('Height (m)')).toHaveValue('1.65');
+    expect(screen.getByTestId('questionnaire-pair-cameras')).toHaveTextContent(
+      'No camera paired',
     );
-    const originalImport = mockClient.importMedia;
-    mockClient.importMedia = imported;
-    try {
-      render(<App />);
-      fireEvent.click(screen.getByTestId('cover-upload-media'));
-      expect(screen.getByTestId('screen-upload-media')).toBeInTheDocument();
-      expect(
-        screen.queryByTestId('screen-upload-subject'),
-      ).not.toBeInTheDocument();
-      expect(screen.queryByTestId('screen-pair')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('screen-capture')).not.toBeInTheDocument();
-      const stepper = screen.getByTestId('stepper');
-      expect(stepper.querySelector('.step.active')).toHaveTextContent(
-        '1 Upload',
-      );
-      expect(stepper).toHaveTextContent('2 Review');
-      expect(stepper).toHaveTextContent('3 Pose');
-      expect(stepper).not.toHaveTextContent('New Session');
-      expect(stepper).not.toHaveTextContent('Pose estimation');
-      expect(screen.getByTestId('upload-drop')).toHaveTextContent(
-        'Drag & drop an MP4 here',
-      );
-      expect(screen.getByTestId('upload-drop')).toHaveTextContent(
-        'MP4 only · one motion video for v1',
-      );
-      expect(screen.queryByTestId('subject-height')).not.toBeInTheDocument();
+  });
 
-      fireEvent.click(screen.getByTestId('upload-home'));
-      expect(screen.getByTestId('screen-cover')).toBeInTheDocument();
-      expect(screen.queryByTestId('stepper')).not.toBeInTheDocument();
+  it('suspends standing capture while visiting settings and keeps the accepted photos', async () => {
+    await goToSubject();
+    await finishPostures();
+    await waitFor(() =>
+      expect(screen.getByTestId('standing-step-RL')).toHaveAttribute(
+        'data-state',
+        'done',
+      ),
+    );
+    const subject = screen.getByTestId('screen-subject');
+    fireEvent.click(screen.getByTestId('subject-back-pairing'));
+    expect(subject).not.toBeVisible();
+    fireEvent.click(screen.getByTestId('pair-continue'));
+    expect(screen.getByTestId('screen-subject')).toBe(subject);
+    expect(subject).toBeVisible();
+    for (const code of ['F', 'LL', 'RL'])
+      expect(screen.getByTestId(`standing-step-${code}`)).toHaveAttribute(
+        'data-state',
+        'done',
+      );
+  });
 
-      fireEvent.click(screen.getByTestId('cover-upload-media'));
-      const proceed = screen.getByTestId('upload-proceed');
-      expect(proceed).toBeDisabled();
-      fireEvent.change(screen.getByTestId('subject-id'), {
-        target: { value: '' },
-      });
-      expect(screen.getByTestId('upload-subject-hint')).toHaveTextContent(
-        /enter a subject id/i,
-      );
-
-      const input = screen.getByTestId('upload-file-input');
-      const mp4 = new File([new Uint8Array([0, 0, 0, 0x18])], 'walk.mp4', {
-        type: 'video/mp4',
-      });
-      fireEvent.change(input, { target: { files: [mp4] } });
-      expect(screen.getByTestId('upload-error')).toHaveTextContent(
-        /subject id/i,
-      );
-      expect(imported).not.toHaveBeenCalled();
-
-      fireEvent.change(screen.getByTestId('subject-id'), {
-        target: { value: 'UG0009' },
-      });
-      fireEvent.change(screen.getByTestId('subject-name'), {
-        target: { value: 'Lee Ada' },
-      });
-      const notes = new File(['nope'], 'notes.txt', { type: 'text/plain' });
-      fireEvent.change(input, { target: { files: [notes] } });
-      expect(screen.getByTestId('upload-error')).toHaveTextContent(/mp4/i);
-      expect(imported).not.toHaveBeenCalled();
-
-      const extra = new File([new Uint8Array([1])], 'side.mp4', {
-        type: 'video/mp4',
-      });
-      fireEvent.change(input, { target: { files: [mp4, extra] } });
-      expect(screen.getByTestId('upload-error')).toHaveTextContent(/one mp4/i);
-      expect(imported).not.toHaveBeenCalled();
-
-      fireEvent.change(input, { target: { files: [mp4] } });
-      await waitFor(() =>
-        expect(screen.getByTestId('upload-progress-pct')).toHaveTextContent(
-          '40%',
-        ),
-      );
-      expect(screen.getByTestId('upload-progress')).toHaveTextContent(
-        'Uploading…',
-      );
-      expect(proceed).toBeDisabled();
-      expect(imported).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filename: 'walk.mp4',
-          fresh: true,
-          trialName: 'walk',
-        }),
-      );
-      pending.release?.();
-      await waitFor(() => expect(proceed).not.toBeDisabled());
-      expect(screen.getByTestId('upload-file-row')).toHaveTextContent(
-        'walk.mp4',
-      );
-      expect(screen.getByTestId('upload-file-row')).toHaveTextContent('Ready');
-      expect(screen.queryByTestId('upload-progress')).not.toBeInTheDocument();
-
-      fireEvent.change(screen.getByTestId('subject-id'), {
-        target: { value: ' ' },
-      });
-      expect(proceed).toBeDisabled();
-      fireEvent.change(screen.getByTestId('subject-id'), {
-        target: { value: 'UG0009' },
-      });
-      expect(proceed).not.toBeDisabled();
-
-      fireEvent.click(proceed);
-      expect(screen.getByTestId('screen-review')).toBeInTheDocument();
-      expect(
-        screen.getByRole('heading', { name: 'Review upload' }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText('Uploaded video — trim before pose.'),
-      ).toBeInTheDocument();
-      const reviewStepper = screen.getByTestId('stepper');
-      expect(reviewStepper.querySelector('.step.active')).toHaveTextContent(
-        '2 Review',
-      );
-      expect(reviewStepper.querySelector('.step.done')).toHaveTextContent(
-        '1 Upload',
-      );
-      expect(screen.getByTestId('review-play')).toBeInTheDocument();
-      expect(screen.getByTestId('review-speed-0.5')).toBeInTheDocument();
-      expect(screen.getByTestId('review-speed-1')).toBeInTheDocument();
-      expect(screen.getByTestId('review-trim')).toHaveTextContent('Trim');
-      expect(screen.getByTestId('review-trim')).not.toHaveTextContent(
-        'Trim all views',
-      );
-      expect(
-        screen.queryByTestId('review-trial-picker'),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId('review-record-another'),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId('review-pair-cameras'),
-      ).not.toBeInTheDocument();
-      expect(screen.getByTestId('review-video-grid')).toHaveClass('cams-1');
-      expect(screen.getByTestId('review-proceed-pose')).toHaveTextContent(
-        'Proceed',
-      );
-
-      fireEvent.click(screen.getByTestId('review-home'));
-      expect(screen.getByTestId('screen-cover')).toBeInTheDocument();
-      expect(screen.queryByTestId('stepper')).not.toBeInTheDocument();
-
-      fireEvent.click(screen.getByTestId('cover-start-recording'));
-      fireEvent.click(
-        within(screen.getByTestId('screen-session')).getByRole('button', {
-          name: 'Create session',
-        }),
-      );
-      expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
-      expect(screen.getByTestId('stepper')).toHaveTextContent('1 New Session');
-      expect(screen.getByTestId('stepper')).not.toHaveTextContent('1 Upload');
-      expect(screen.getByTestId('pair-summary')).toHaveTextContent('0 cameras');
-      fireEvent.click(screen.getByTestId('pair-home'));
-
-      fireEvent.click(screen.getByTestId('cover-upload-media'));
-      expect((screen.getByTestId('subject-id') as HTMLInputElement).value).toBe(
-        'UG0009',
-      );
-      expect(
-        (screen.getByTestId('subject-name') as HTMLInputElement).value,
-      ).toBe('Lee Ada');
-      expect(screen.queryByTestId('upload-file-row')).not.toBeInTheDocument();
-      expect(screen.getByTestId('upload-proceed')).toBeDisabled();
-
-      fireEvent.change(screen.getByTestId('upload-file-input'), {
-        target: { files: [mp4] },
-      });
-      await waitFor(() =>
-        expect(screen.getByTestId('upload-progress-pct')).toHaveTextContent(
-          '40%',
-        ),
-      );
-      pending.release?.();
-      await waitFor(() =>
-        expect(screen.getByTestId('upload-proceed')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('upload-proceed'));
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-
-      expect(screen.getByTestId('screen-pose')).toBeInTheDocument();
-      expect(
-        screen.getByTestId('stepper').querySelector('.step.active'),
-      ).toHaveTextContent('3 Pose');
-      const poseDone = [
-        ...screen.getByTestId('stepper').querySelectorAll('.step.done'),
-      ];
-      expect(poseDone.map((el) => el.textContent?.trim())).toEqual([
-        '1 Upload',
-        '2 Review',
-      ]);
-      expect(screen.getByTestId('pose-rerun')).toHaveTextContent(
-        'Run pose estimation',
-      );
-      expect(screen.getByTestId('pose-rerun-note')).toHaveTextContent(
-        'Applies to walk.',
-      );
-      expect(screen.getByText(/Lee Ada · cm/)).toBeInTheDocument();
-      expect(screen.getByTestId('pose-scale-height')).toBeInTheDocument();
-      expect(screen.queryByTestId('pose-trial-picker')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('pose-cam-tabs')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('pose-pair-cameras')).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId('pose-record-another'),
-      ).not.toBeInTheDocument();
-      expect(screen.queryByTestId('pose-save')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('pose-save-note')).not.toBeInTheDocument();
-      expect(screen.getByTestId('pose-back-review')).toBeInTheDocument();
-      expect(screen.getByTestId('pose-home')).toBeInTheDocument();
-      expect(screen.getByTestId('pose-3d-viewport')).toBeInTheDocument();
-      expect(screen.getByText('3D pose · Upload')).toBeInTheDocument();
-      expect(screen.getByText('Video · 2D pose')).toBeInTheDocument();
-      expect(screen.getByTestId('pose-frame-meta')).toHaveTextContent(
-        'Frame 0 / 0',
-      );
-      expect(screen.getByTestId('pose-frame-meta')).not.toHaveTextContent(
-        'views in sync',
-      );
-
-      fireEvent.click(screen.getByTestId('pose-export'));
-      expect(screen.getByTestId('pose-export-csv2d-one')).toHaveTextContent(
-        'CSV · 2D',
-      );
-      expect(screen.getByTestId('pose-export-csv3d-one')).toHaveTextContent(
-        'CSV · 3D',
-      );
-      expect(screen.getByTestId('pose-export-trc-one')).toHaveTextContent(
-        'OpenSim TRC',
-      );
-      expect(
-        screen.queryByTestId('pose-export-csv2d-all'),
-      ).not.toBeInTheDocument();
-      expect(screen.queryByTestId('pose-export-json')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('pose-export-mp4')).not.toBeInTheDocument();
-
-      fireEvent.click(screen.getByTestId('pose-rerun'));
-      await waitFor(() =>
-        expect(screen.getByTestId('pose-frame-meta').textContent).toMatch(
-          /Frame 1 \//,
-        ),
-      );
-      expect(screen.getByTestId('pose-play')).toBeEnabled();
-
-      fireEvent.click(screen.getByTestId('pose-upload-another'));
-      expect(screen.getByTestId('screen-upload-media')).toBeInTheDocument();
-      expect(
-        screen.getByTestId('stepper').querySelector('.step.active'),
-      ).toHaveTextContent('1 Upload');
-      expect((screen.getByTestId('subject-id') as HTMLInputElement).value).toBe(
-        'UG0009',
-      );
-      expect(screen.queryByTestId('upload-file-row')).not.toBeInTheDocument();
-      expect(screen.getByTestId('upload-proceed')).toBeDisabled();
-
-      fireEvent.change(screen.getByTestId('upload-file-input'), {
-        target: { files: [mp4] },
-      });
-      await waitFor(() =>
-        expect(screen.getByTestId('upload-progress-pct')).toHaveTextContent(
-          '40%',
-        ),
-      );
-      pending.release?.();
-      await waitFor(() =>
-        expect(screen.getByTestId('upload-proceed')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('upload-proceed'));
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-      expect(screen.getByTestId('pose-frame-meta')).toHaveTextContent(
-        'Frame 0 / 0',
-      );
-    } finally {
-      mockClient.importMedia = originalImport;
-    }
+  it('shows the warning again after the last camera is removed and returns to standing photos', async () => {
+    await goToSubject();
+    expect(screen.getByTestId('subject-back-pairing')).not.toHaveTextContent(
+      'No camera paired',
+    );
+    fireEvent.click(screen.getByTestId('subject-back-pairing'));
+    fireEvent.click(screen.getByTestId('cam-remove-0'));
+    fireEvent.click(screen.getByTestId('cam-remove-yes-0'));
+    await waitFor(() =>
+      expect(screen.getByTestId('pair-summary')).toHaveTextContent(
+        '0 cameras ready',
+      ),
+    );
+    fireEvent.click(screen.getByTestId('pair-continue'));
+    expect(screen.getByTestId('screen-subject')).toBeVisible();
+    expect(screen.getByTestId('subject-back-pairing')).toHaveTextContent(
+      'No camera paired',
+    );
+    expect(
+      screen.queryByTestId('standing-capture-now'),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('subject-back-questionnaire'));
+    expect(screen.getByTestId('screen-session')).toBeVisible();
+    fireEvent.click(screen.getByTestId('session-home'));
+    expect(screen.getByTestId('screen-cover')).toBeVisible();
+    expect(screen.getByTestId('home-pair-cameras')).toHaveTextContent(
+      'No camera paired',
+    );
   });
 
   it('enables Pair a device when the preload API cannot be extended', async () => {
     const api = {
+      saveQuestionnaire: async () => ({
+        ok: true as const,
+        folder: '/tmp/motuscap-lite-save',
+      }),
       chooseSaveFolder: async () => '/tmp/motuscap-lite-save',
       writeSaveFiles: async (
         folder: string,
@@ -920,12 +724,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
     Object.preventExtensions(api);
     window.motuscapLite = api;
 
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
+    renderPairApp();
     await waitFor(() =>
       expect(screen.getByTestId('pair-next')).not.toBeDisabled(),
     );
@@ -941,12 +740,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
   it('QR address switch: local by default, public URL only when chosen', async () => {
     localStorage.clear();
     try {
-      renderRecordApp();
-      fireEvent.click(
-        within(screen.getByTestId('screen-session')).getByRole('button', {
-          name: 'Create session',
-        }),
-      );
+      renderPairApp();
       await waitFor(() =>
         expect(screen.getByTestId('pair-next')).not.toBeDisabled(),
       );
@@ -994,23 +788,18 @@ describe('MotusCap Lite Phase 1 shell', () => {
     }
   });
 
-  it('loads the app module and renders the stepper', async () => {
-    renderRecordApp();
+  it('loads camera settings independently of the assessment stepper', async () => {
+    renderPairApp();
     expect(screen.getByTestId('app-shell')).toBeInTheDocument();
-    expect(screen.getByTestId('stepper')).toBeInTheDocument();
-    expect(screen.getByTestId('screen-session')).toBeInTheDocument();
+    expect(screen.queryByTestId('stepper')).not.toBeInTheDocument();
+    expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
     await waitFor(() => {
       expect(window.motuscapLite?.backendUrl).toBe('http://127.0.0.1:9');
     });
   });
 
   it('re-pairs Cam 1 in place after confirm, even with all 3 slots used', async () => {
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
+    renderPairApp();
     await waitFor(() =>
       expect(screen.getByTestId('pair-next')).not.toBeDisabled(),
     );
@@ -1049,12 +838,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
   });
 
   it('removes a paired camera from the slot next to Re-pair', async () => {
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
+    renderPairApp();
     await waitFor(() =>
       expect(screen.getByTestId('pair-next')).not.toBeDisabled(),
     );
@@ -1096,24 +880,19 @@ describe('MotusCap Lite Phase 1 shell', () => {
   });
 
   it('pairs with mock QR then continues; enforces max 3', async () => {
-    renderRecordApp();
+    renderPairApp();
 
     await waitFor(() =>
-      expect(screen.getByTestId('screen-session')).toBeInTheDocument(),
+      expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
     );
 
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
     expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
 
     await waitFor(() =>
       expect(screen.getByTestId('backend-info')).toBeInTheDocument(),
     );
 
-    expect(screen.getByTestId('pair-continue')).toBeDisabled();
+    expect(screen.getByTestId('pair-continue')).toBeEnabled();
 
     fireEvent.click(screen.getByTestId('pair-next'));
     await waitFor(() =>
@@ -1122,7 +901,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
 
     fireEvent.click(screen.getByTestId('pair-simulate'));
     await waitFor(() =>
-      expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
+      expect(screen.queryByTestId('qr-box')).not.toBeInTheDocument(),
     );
     expect(devices).toHaveLength(1);
 
@@ -1149,488 +928,47 @@ describe('MotusCap Lite Phase 1 shell', () => {
     expect(screen.getByTestId('pair-next')).toBeDisabled();
     expect(devices.map((d) => d.view_code)).toEqual(['F', 'L', 'O']);
 
-    fireEvent.click(screen.getByTestId('pair-continue'));
+    await continueFromPair();
     expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
   });
 
-  it('starts blank, requires height and weight, and confirms a new subject', async () => {
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByTestId('pair-next'));
-    await waitFor(() =>
-      expect(screen.getByTestId('qr-box')).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByTestId('pair-simulate'));
-    await waitFor(() =>
-      expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
-    );
-    fireEvent.click(screen.getByTestId('pair-continue'));
-
-    const id = screen.getByTestId('subject-id') as HTMLInputElement;
-    const name = screen.getByTestId('subject-name') as HTMLInputElement;
-    const height = screen.getByTestId('subject-height') as HTMLInputElement;
-    const weight = screen.getByTestId('subject-weight') as HTMLInputElement;
-    expect(id.value).toBe('');
-    expect(name.value).toBe('');
-    expect(height.value).toBe('');
-    expect(weight.value).toBe('');
-    expect(screen.getByTestId('subject-continue')).toBeDisabled();
-    expect(screen.getByTestId('subject-continue')).toHaveClass('btn-green');
+  it('has no subject switching or assessment completion controls before the report', async () => {
+    await goToSubject();
     expect(screen.queryByTestId('new-subject')).not.toBeInTheDocument();
-
-    await waitFor(() =>
-      expect(screen.getByTestId('standing-capture-now')).toBeInTheDocument(),
-    );
-    expect(screen.getByTestId('standing-capture-now')).toBeDisabled();
-    fireEvent.click(screen.getByTestId('standing-capture-now'));
-    expect(screen.getByTestId('guide-countdown').textContent).toBe('');
-
-    fireEvent.change(height, { target: { value: '0' } });
-    fireEvent.change(weight, { target: { value: '68' } });
-    expect(screen.getByTestId('standing-capture-now')).toBeDisabled();
-    expect(screen.getByTestId('subject-continue')).toBeDisabled();
-
-    fireEvent.change(id, { target: { value: 'UG0001' } });
-    fireEvent.change(name, { target: { value: 'Chan Tai Man' } });
-    fireEvent.change(height, { target: { value: '172' } });
-    fireEvent.change(weight, { target: { value: '68' } });
-    expect(screen.getByTestId('standing-capture-now')).not.toBeDisabled();
-
-    const demo = document.querySelector(
-      '[data-testid="subject-demo-complete"]',
-    );
-    if (!(demo instanceof HTMLElement)) {
-      throw new Error('subject-demo-complete is missing');
-    }
-    fireEvent.click(demo);
-    await waitFor(() =>
-      expect(screen.getByTestId('standing-step-RL')).toHaveAttribute(
-        'data-state',
-        'done',
-      ),
-    );
-    const newer = screen.getByTestId('new-subject');
-    expect(newer).toHaveClass('btn-primary');
-    expect(newer).toHaveTextContent('+ New Subject');
-    expect(screen.getByTestId('subject-continue')).not.toBeDisabled();
-    expect(screen.getByTestId('subject-continue')).toHaveClass('btn-green');
-
-    fireEvent.click(newer);
-    expect(screen.getByTestId('new-subject-dialog')).toHaveTextContent(
-      "Start a new subject profile? This clears the previous subject's details, standing photos, folder, and trials from this session. Photos already saved to a folder stay on disk.",
-    );
-    fireEvent.click(screen.getByTestId('new-subject-cancel'));
-    expect(screen.queryByTestId('new-subject-dialog')).not.toBeInTheDocument();
-    expect(id.value).toBe('UG0001');
-    expect(screen.getByTestId('standing-step-RL')).toHaveAttribute(
-      'data-state',
-      'done',
-    );
-
-    fireEvent.click(screen.getByTestId('new-subject'));
-    expect(screen.getByTestId('new-subject-confirm')).toHaveTextContent(
-      'Start new subject',
-    );
-    fireEvent.click(screen.getByTestId('new-subject-confirm'));
-    expect(screen.queryByTestId('new-subject-dialog')).not.toBeInTheDocument();
-    expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
-    expect((screen.getByTestId('subject-id') as HTMLInputElement).value).toBe(
-      '',
-    );
-    expect((screen.getByTestId('subject-name') as HTMLInputElement).value).toBe(
-      '',
-    );
-    expect(
-      (screen.getByTestId('subject-height') as HTMLInputElement).value,
-    ).toBe('');
-    expect(
-      (screen.getByTestId('subject-weight') as HTMLInputElement).value,
-    ).toBe('');
-    expect(screen.queryByTestId('new-subject')).not.toBeInTheDocument();
-    expect(screen.getByTestId('standing-step-RL')).not.toHaveAttribute(
-      'data-state',
-      'done',
-    );
-    expect(screen.getByTestId('subject-continue')).toBeDisabled();
-
     await finishPostures();
+    expect(screen.queryByTestId('new-subject')).not.toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
     );
     fireEvent.click(screen.getByTestId('subject-continue'));
-    await chooseSubjectFolder('existing');
+
     await waitFor(() =>
       expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
     );
+    await startCapture();
+    await waitFor(() =>
+      expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByTestId('capture-stop'));
+    await waitFor(() =>
+      expect(screen.getByTestId('screen-review')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId('review-proceed-pose'));
+    expect(screen.getByTestId('screen-pose')).toBeInTheDocument();
+    expect(screen.queryByTestId('new-subject')).not.toBeInTheDocument();
     expect(
-      (screen.getByTestId('capture-trial-name') as HTMLInputElement).value,
-    ).toBe('gait01');
-  });
-
-  it('offers New Subject on the live pose page and not on an upload', async () => {
-    const fullRes = await import('./lib/fullResPose');
-    let finishLate: (
-      value: Awaited<ReturnType<typeof fullRes.runFullResPoseEstimation>>,
-    ) => void = () => {};
-    const late = new Promise<
-      Awaited<ReturnType<typeof fullRes.runFullResPoseEstimation>>
-    >((resolve) => {
-      finishLate = resolve;
-    });
-    const poseSpy = vi
-      .spyOn(fullRes, 'runFullResPoseEstimation')
-      .mockReturnValue(late);
-    const originalImport = mockClient.importMedia;
-    mockClient.importMedia = async (body) => ({
-      ok: true as const,
-      trial_id: 'tr_import',
-      name: body.trialName,
-      duration_sec: 2.5,
-      device_id: 'dev_upload',
-      cam_index: 0,
-      view_code: null,
-      filename: body.filename,
-      bytes: body.bytes.byteLength,
-      devices: [
-        {
-          device_id: 'dev_upload',
-          name: body.filename,
-          cam_index: 0,
-          view_code: null,
-        },
-      ],
-    });
-
-    try {
-      await goToCapture();
-      fireEvent.click(screen.getByTestId('capture-start'));
-      await waitFor(() =>
-        expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('capture-stop'));
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-review')).toBeInTheDocument(),
-      );
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-      expect(screen.getByTestId('screen-pose')).toBeInTheDocument();
-      expect(screen.getByTestId('new-subject')).toHaveClass('btn-primary');
-
-      fireEvent.click(screen.getByTestId('pose-rerun'));
-      await waitFor(() => expect(poseSpy).toHaveBeenCalled());
-      fireEvent.click(screen.getByTestId('new-subject'));
-      fireEvent.click(screen.getByTestId('new-subject-confirm'));
-      expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
-      expect((screen.getByTestId('subject-id') as HTMLInputElement).value).toBe(
-        '',
-      );
-      finishLate({
-        trialId: null,
-        trialName: 'gait01',
-        model: 'Full',
-        params: fullRes.DEFAULT_POSE_PARAMS,
-        cameras: [],
-        ranAt: 1,
-        note: 'abandoned-result',
-      });
-      await late;
-      expect(screen.queryByText(/Pose ready/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/abandoned-result/)).not.toBeInTheDocument();
-
-      await finishPostures();
-      await waitFor(() =>
-        expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('subject-continue'));
-      await chooseSubjectFolder('existing');
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
-      );
-      expect(
-        (screen.getByTestId('capture-trial-name') as HTMLInputElement).value,
-      ).toBe('gait01');
-
-      fireEvent.click(screen.getByTestId('capture-start'));
-      await waitFor(() =>
-        expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('capture-stop'));
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-review')).toBeInTheDocument(),
-      );
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-      expect(screen.getByTestId('new-subject')).toBeInTheDocument();
-      fireEvent.click(screen.getByTestId('pose-pair-cameras'));
-      expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
-      fireEvent.click(screen.getByTestId('pair-home'));
-      fireEvent.click(screen.getByTestId('cover-upload-media'));
-      const mp4 = new File([new Uint8Array([0, 0, 0, 0x18])], 'walk.mp4', {
-        type: 'video/mp4',
-      });
-      fireEvent.change(screen.getByTestId('upload-file-input'), {
-        target: { files: [mp4] },
-      });
-      await waitFor(() =>
-        expect(screen.getByTestId('upload-proceed')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('upload-proceed'));
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-      expect(screen.getByTestId('screen-pose')).toBeInTheDocument();
-      expect(screen.queryByTestId('new-subject')).not.toBeInTheDocument();
-    } finally {
-      poseSpy.mockRestore();
-      mockClient.importMedia = originalImport;
-    }
-  });
-
-  it('Complete analysis returns to Home and restores session defaults', async () => {
-    const removeDevice = vi.spyOn(mockClient, 'removeDevice');
-    const deleteRecordings = vi.spyOn(mockClient, 'deleteRecordings');
-    try {
-      render(<App />);
-      fireEvent.click(screen.getByTestId('cover-start-recording'));
-      const session = screen.getByTestId('screen-session');
-      fireEvent.change(
-        within(session).getByDisplayValue('Lab session — gait pilot'),
-        { target: { value: 'Edited session' } },
-      );
-      fireEvent.change(
-        within(session).getByDisplayValue('Indoor lab, 2× iPhone'),
-        { target: { value: 'Edited notes' } },
-      );
-      fireEvent.click(
-        within(session).getByRole('button', { name: 'Create session' }),
-      );
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
-      );
-      fireEvent.click(screen.getByTestId('pair-next'));
-      await waitFor(() =>
-        expect(screen.getByTestId('pair-simulate')).toBeInTheDocument(),
-      );
-      fireEvent.click(screen.getByTestId('pair-simulate'));
-      await waitFor(() =>
-        expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('imu-scan-connect'));
-      fireEvent.click(screen.getByTestId('imu-chip-femurL'));
-      fireEvent.click(screen.getByTestId('pair-continue'));
-      expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
-      await finishPostures();
-      await waitFor(() =>
-        expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('subject-continue'));
-      await chooseSubjectFolder('existing');
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
-      );
-      fireEvent.change(screen.getByTestId('capture-trial-name'), {
-        target: { value: 'walk02' },
-      });
-      fireEvent.click(screen.getByTestId('capture-start'));
-      await waitFor(() =>
-        expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('capture-stop'));
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-review')).toBeInTheDocument(),
-      );
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-      expect(screen.getByTestId('screen-pose')).toBeInTheDocument();
-      const complete = screen.getByTestId('pose-complete-analysis');
-      expect(complete).toHaveTextContent('Complete analysis');
-      expect(complete).toHaveClass('btn-primary');
-      fireEvent.click(screen.getByTestId('pose-model-lite'));
-      expect(screen.getByTestId('pose-model-lite')).toHaveClass('on');
-
-      fireEvent.click(complete);
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-cover')).toBeInTheDocument(),
-      );
-      expect(screen.queryByTestId('stepper')).not.toBeInTheDocument();
-      expect(removeDevice).toHaveBeenCalledWith('dev_1');
-      expect(deleteRecordings).toHaveBeenCalledWith('tr_1');
-
-      fireEvent.click(screen.getByTestId('cover-start-recording'));
-      const again = screen.getByTestId('screen-session');
-      expect(
-        within(again).getByDisplayValue('Lab session — gait pilot'),
-      ).toBeInTheDocument();
-      expect(
-        within(again).getByDisplayValue('Indoor lab, 2× iPhone'),
-      ).toBeInTheDocument();
-      fireEvent.click(
-        within(again).getByRole('button', { name: 'Create session' }),
-      );
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
-      );
-      expect(screen.getByTestId('pair-summary')).toHaveTextContent('0 cameras');
-      expect(screen.getByTestId('pair-imu-badge')).toHaveTextContent(
-        'None connected',
-      );
-      expect(screen.getByTestId('backend-info')).toHaveTextContent(
-        '127.0.0.1:9',
-      );
-
-      fireEvent.click(screen.getByTestId('pair-next'));
-      await waitFor(() =>
-        expect(screen.getByTestId('pair-simulate')).toBeInTheDocument(),
-      );
-      fireEvent.click(screen.getByTestId('pair-simulate'));
-      await waitFor(() =>
-        expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('pair-continue'));
-      expect((screen.getByTestId('subject-id') as HTMLInputElement).value).toBe(
-        '',
-      );
-      expect(
-        (screen.getByTestId('subject-name') as HTMLInputElement).value,
-      ).toBe('');
-      expect(
-        (screen.getByTestId('subject-height') as HTMLInputElement).value,
-      ).toBe('');
-      expect(
-        (screen.getByTestId('subject-weight') as HTMLInputElement).value,
-      ).toBe('');
-      await finishPostures();
-      await waitFor(() =>
-        expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('subject-continue'));
-      await chooseSubjectFolder('existing');
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
-      );
-      expect(
-        (screen.getByTestId('capture-trial-name') as HTMLInputElement).value,
-      ).toBe('gait01');
-      fireEvent.click(screen.getByTestId('capture-start'));
-      await waitFor(() =>
-        expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('capture-stop'));
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-review')).toBeInTheDocument(),
-      );
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-      expect(screen.getByTestId('pose-model-full')).toHaveClass('on');
-      expect(screen.getByTestId('pose-model-lite')).not.toHaveClass('on');
-    } finally {
-      removeDevice.mockRestore();
-      deleteRecordings.mockRestore();
-    }
-  });
-
-  it('Complete analysis on an upload clears the subject and ignores a late re-run', async () => {
-    const fullRes = await import('./lib/fullResPose');
-    let finishLate: (
-      value: Awaited<ReturnType<typeof fullRes.runFullResPoseEstimation>>,
-    ) => void = () => {};
-    const late = new Promise<
-      Awaited<ReturnType<typeof fullRes.runFullResPoseEstimation>>
-    >((resolve) => {
-      finishLate = resolve;
-    });
-    const poseSpy = vi
-      .spyOn(fullRes, 'runFullResPoseEstimation')
-      .mockReturnValue(late);
-    const originalImport = mockClient.importMedia;
-    const deleteRecordings = vi.spyOn(mockClient, 'deleteRecordings');
-    mockClient.importMedia = async (body) => ({
-      ok: true as const,
-      trial_id: 'tr_import',
-      name: body.trialName,
-      duration_sec: 2.5,
-      device_id: 'dev_upload',
-      cam_index: 0,
-      view_code: null,
-      filename: body.filename,
-      bytes: body.bytes.byteLength,
-      devices: [
-        {
-          device_id: 'dev_upload',
-          name: body.filename,
-          cam_index: 0,
-          view_code: null,
-        },
-      ],
-    });
-    try {
-      render(<App />);
-      fireEvent.click(screen.getByTestId('cover-upload-media'));
-      fireEvent.change(screen.getByTestId('subject-id'), {
-        target: { value: 'UG0009' },
-      });
-      fireEvent.change(screen.getByTestId('subject-name'), {
-        target: { value: 'Lee Ada' },
-      });
-      fireEvent.change(screen.getByTestId('upload-file-input'), {
-        target: {
-          files: [
-            new File([new Uint8Array([0, 0, 0, 0x18])], 'walk.mp4', {
-              type: 'video/mp4',
-            }),
-          ],
-        },
-      });
-      await waitFor(() =>
-        expect(screen.getByTestId('upload-proceed')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('upload-proceed'));
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-      expect(screen.getByTestId('pose-complete-analysis')).toBeInTheDocument();
-      fireEvent.click(screen.getByTestId('pose-rerun'));
-      await waitFor(() => expect(poseSpy).toHaveBeenCalled());
-      fireEvent.click(screen.getByTestId('pose-complete-analysis'));
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-cover')).toBeInTheDocument(),
-      );
-      expect(deleteRecordings).toHaveBeenCalledWith('tr_import');
-      finishLate({
-        trialId: 'tr_import',
-        trialName: 'walk',
-        model: 'Full',
-        params: fullRes.DEFAULT_POSE_PARAMS,
-        cameras: [],
-        ranAt: 1,
-        note: 'abandoned-result',
-      });
-      await late;
-      expect(screen.queryByText(/Pose ready/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/abandoned-result/)).not.toBeInTheDocument();
-
-      fireEvent.click(screen.getByTestId('cover-upload-media'));
-      expect((screen.getByTestId('subject-id') as HTMLInputElement).value).toBe(
-        '',
-      );
-      expect(
-        (screen.getByTestId('subject-name') as HTMLInputElement).value,
-      ).toBe('');
-      expect(screen.queryByTestId('upload-file-row')).not.toBeInTheDocument();
-    } finally {
-      poseSpy.mockRestore();
-      deleteRecordings.mockRestore();
-      mockClient.importMedia = originalImport;
-    }
+      screen.queryByTestId('pose-complete-analysis'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: /End Assessment|Complete analysis/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it('Phase 2: requires Subject ID, F→LL→RL demo path, Continue gate, load-existing retake', async () => {
-    renderRecordApp();
+    renderPairApp();
 
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
     await waitFor(() =>
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
     );
@@ -1642,9 +980,9 @@ describe('MotusCap Lite Phase 1 shell', () => {
     );
     fireEvent.click(screen.getByTestId('pair-simulate'));
     await waitFor(() =>
-      expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
+      expect(screen.queryByTestId('qr-box')).not.toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByTestId('pair-continue'));
+    await continueFromPair();
     expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
 
     // Standing is always frontal — label stays "Cam 1 · Frontal View" (even single-cam)
@@ -1657,15 +995,18 @@ describe('MotusCap Lite Phase 1 shell', () => {
     const continueBtn = screen.getByTestId('subject-continue');
     expect(continueBtn).toBeDisabled();
 
-    // Required Subject ID — clear it and confirm gate stays locked
-    const idInput = screen.getByTestId('subject-id');
-    fireEvent.change(idInput, { target: { value: '' } });
-    expect(continueBtn).toBeDisabled();
-
-    fireEvent.change(idInput, { target: { value: 'UG0001' } });
-    fireEvent.change(screen.getByTestId('subject-name'), {
-      target: { value: 'Chan Tai Man' },
-    });
+    expect(
+      screen.getByRole('heading', { name: 'Standing Posture Capture' }),
+    ).toBeInTheDocument();
+    for (const field of [
+      'subject-id',
+      'subject-name',
+      'subject-height',
+      'subject-weight',
+    ]) {
+      expect(screen.queryByTestId(field)).not.toBeInTheDocument();
+    }
+    expect(continueBtn).toHaveTextContent('Save & Continue');
 
     // Demo-complete path for CI (hardware-optional)
     await finishPostures();
@@ -1687,54 +1028,36 @@ describe('MotusCap Lite Phase 1 shell', () => {
       /face the frontal camera again/i,
     );
     expect(screen.getByTestId('standing-prompt').textContent).toMatch(
-      /standing_F\.png/,
+      /standing_F_annotated\.png/,
     );
     expect(screen.getByTestId('standing-prompt').textContent).toMatch(
-      /standing_LL\.png/,
+      /standing_LL_annotated\.png/,
     );
     expect(screen.getByTestId('standing-prompt').textContent).toMatch(
-      /standing_RL\.png/,
+      /standing_RL_annotated\.png/,
     );
     expect(screen.getByTestId('standing-prompt').textContent).toMatch(
       /Will save:/,
     );
     expect(continueBtn).not.toBeDisabled();
 
-    // Cancel stays on the page and writes nothing
     const chooseSpy = vi.spyOn(window.motuscapLite!, 'chooseSaveFolder');
-    fireEvent.click(continueBtn);
-    await waitFor(() =>
-      expect(screen.getByTestId('subject-folder-choice')).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByTestId('subject-folder-cancel'));
-    expect(
-      screen.queryByTestId('subject-folder-choice'),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
-    expect(chooseSpy).not.toHaveBeenCalled();
-
-    // Create a new subject folder under the chosen parent
     const postureWrite = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
+    expect(postureWrite).not.toHaveBeenCalled();
     fireEvent.click(continueBtn);
-    await chooseSubjectFolder('new');
     await waitFor(() => expect(postureWrite).toHaveBeenCalled());
-    expect(chooseSpy).toHaveBeenCalledWith(
-      'Choose the parent folder',
-      'Choose',
-    );
-    expect(postureWrite.mock.calls[0]?.[0]).toBe(
-      '/tmp/motuscap-lite-save/UG0001_Chan-Tai-Man',
-    );
+    expect(chooseSpy).not.toHaveBeenCalled();
+    expect(postureWrite.mock.calls[0]?.[0]).toBe('/tmp/motuscap-lite-save');
     const photoFiles =
       postureWrite.mock.calls[0]?.[1]?.map((f) => f.filename) ?? [];
     expect(photoFiles).toEqual([
-      'UG0001_Chan-Tai-Man_standing_F.png',
-      'UG0001_Chan-Tai-Man_standing_F_full.png',
-      'UG0001_Chan-Tai-Man_standing_LL.png',
-      'UG0001_Chan-Tai-Man_standing_LL_full.png',
-      'UG0001_Chan-Tai-Man_standing_RL.png',
-      'UG0001_Chan-Tai-Man_standing_RL_full.png',
-      'UG0001_Chan-Tai-Man_subject.csv',
+      'UG0001__standing_F_annotated.png',
+      'UG0001__standing_F_full.png',
+      'UG0001__standing_LL_annotated.png',
+      'UG0001__standing_LL_full.png',
+      'UG0001__standing_RL_annotated.png',
+      'UG0001__standing_RL_full.png',
+      'UG0001__subject.csv',
     ]);
     const csv = Buffer.from(
       postureWrite.mock.calls[0]?.[1]?.find((f) =>
@@ -1743,7 +1066,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
       'base64',
     ).toString('utf8');
     expect(csv).toContain('subject_id,display_name,height_cm,weight_kg');
-    expect(csv).toContain('UG0001,Chan Tai Man,172,68');
+    expect(csv).toContain('UG0001,,172,68');
     await waitFor(() =>
       expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
     );
@@ -1833,7 +1156,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('replaces only the accepted posture and writes its crop and original when saved again', async () => {
+    it('replaces only the accepted posture and writes the annotated preview and clean original', async () => {
       const write = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
       await goToCapture();
       expect(write).toHaveBeenCalledTimes(1);
@@ -1857,9 +1180,9 @@ describe('MotusCap Lite Phase 1 shell', () => {
         fireEvent.click(screen.getByTestId('standing-proceed'));
       });
       expect(save).toHaveBeenLastCalledWith('UG0001', 'LL', {
-        filename: 'UG0001_Chan-Tai-Man_standing_LL.png',
-        croppedPng,
-        fullFilename: 'UG0001_Chan-Tai-Man_standing_LL_full.png',
+        filename: 'UG0001__standing_LL_annotated.png',
+        croppedPng: new TextEncoder().encode('review'),
+        fullFilename: 'UG0001__standing_LL_full.png',
         fullPng,
       });
       for (const code of ['F', 'LL', 'RL']) {
@@ -1877,17 +1200,18 @@ describe('MotusCap Lite Phase 1 shell', () => {
           args[1] === 'LL'
             ? args[2] === 'full'
               ? fullPng
-              : croppedPng
+              : new TextEncoder().encode('review')
             : Uint8Array.from([137, 80, 78, 71, 1]),
       );
       fireEvent.click(screen.getByTestId('subject-continue'));
-      await chooseSubjectFolder('existing');
+
       await waitFor(() => expect(write).toHaveBeenCalledTimes(2));
       const files = write.mock.calls[1][1];
       expect(
-        files.find((file) => file.filename.endsWith('_standing_LL.png'))
-          ?.base64,
-      ).toBe(Buffer.from(croppedPng).toString('base64'));
+        files.find((file) =>
+          file.filename.endsWith('_standing_LL_annotated.png'),
+        )?.base64,
+      ).toBe(Buffer.from('review').toString('base64'));
       expect(
         files.find((file) => file.filename.endsWith('_standing_LL_full.png'))
           ?.base64,
@@ -1946,10 +1270,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
 
     it('returns to the first missing posture after retaking an earlier accepted photo', async () => {
       await goToSubject();
-      fillIfBlank('subject-id', 'UG0001');
-      fillIfBlank('subject-name', 'Chan Tai Man');
-      fillIfBlank('subject-height', '172');
-      fillIfBlank('subject-weight', '68');
+
       await takeShot();
       await act(async () => {
         fireEvent.click(screen.getByTestId('standing-proceed'));
@@ -1983,65 +1304,57 @@ describe('MotusCap Lite Phase 1 shell', () => {
     });
   });
 
-  it('waits for the folder dialog before leaving the choice window', async () => {
-    let release: (path: string | null) => void = () => {};
-    let dialogOpened = false;
-    window.motuscapLite!.chooseSaveFolder = () =>
-      new Promise((resolve) => {
-        dialogOpened = true;
-        release = resolve;
-      });
-    const write = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByTestId('pair-next'));
-    await waitFor(() =>
-      expect(screen.getByTestId('qr-box')).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByTestId('pair-simulate'));
-    await waitFor(() =>
-      expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
-    );
-    fireEvent.click(screen.getByTestId('pair-continue'));
+  it('waits for posture writing before opening Capture and prevents duplicate writes', async () => {
+    await goToSubject();
     await finishPostures();
     await waitFor(() =>
       expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
     );
-    fireEvent.click(screen.getByTestId('subject-continue'));
-    fireEvent.click(screen.getByTestId('subject-folder-existing'));
-    await waitFor(() => expect(dialogOpened).toBe(true));
-    expect(screen.getByTestId('subject-folder-choice')).toBeInTheDocument();
-    expect(write).not.toHaveBeenCalled();
-    release('/tmp/motuscap-lite-save');
-    await waitFor(() =>
-      expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
+    let finish!: (result: {
+      ok: true;
+      folder: string;
+      written: string[];
+      missing: [];
+    }) => void;
+    const save = vi.fn(
+      () =>
+        new Promise<{
+          ok: true;
+          folder: string;
+          written: string[];
+          missing: [];
+        }>((resolve) => {
+          finish = resolve;
+        }),
     );
-    expect(write.mock.calls[0]?.[0]).toBe('/tmp/motuscap-lite-save');
+    window.motuscapLite!.saveSubjectFolder = save;
+    fireEvent.click(screen.getByTestId('subject-continue'));
+    expect(screen.getByTestId('subject-continue')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('subject-continue'));
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
+    await act(async () => {
+      finish({
+        ok: true,
+        folder: '/tmp/motuscap-lite-save',
+        written: [],
+        missing: [],
+      });
+    });
+    expect(screen.getByTestId('screen-capture')).toBeInTheDocument();
   });
 
   it('saves through the desktop folder API and opens Capture', async () => {
     const saveSubjectFolder = vi.fn(async () => ({
       ok: true as const,
       folder: '/tmp/motuscap-lite-save',
-      written: ['UG0001_Chan-Tai-Man_standing_F.png'],
+      written: ['UG0001__standing_F_annotated.png'],
       missing: [],
     }));
     window.motuscapLite!.saveSubjectFolder = saveSubjectFolder;
     const write = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
     const choose = vi.spyOn(window.motuscapLite!, 'chooseSaveFolder');
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
+    renderPairApp();
     await waitFor(() =>
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
     );
@@ -2051,52 +1364,44 @@ describe('MotusCap Lite Phase 1 shell', () => {
     );
     fireEvent.click(screen.getByTestId('pair-simulate'));
     await waitFor(() =>
-      expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
+      expect(screen.queryByTestId('qr-box')).not.toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByTestId('pair-continue'));
+    await continueFromPair();
     await finishPostures();
     await waitFor(() =>
       expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
     );
     fireEvent.click(screen.getByTestId('subject-continue'));
-    fireEvent.click(screen.getByTestId('subject-folder-existing'));
     await waitFor(() =>
       expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
     );
     expect(saveSubjectFolder).toHaveBeenCalledWith({
       subjectId: 'UG0001',
-      subjectName: 'Chan Tai Man',
+      subjectName: '',
       heightCm: '172',
       weightKg: '68',
       destination: 'existing',
-      dialogTitle: 'Select the subject folder',
-      buttonLabel: 'Choose',
+      folder: '/tmp/motuscap-lite-save',
     });
     expect(choose).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
   });
 
-  it('keeps the posture photos when the folder dialog is cancelled', async () => {
+  it('keeps the posture photos after a write error and allows retry', async () => {
     const saveSubjectFolder = vi
       .fn()
       .mockResolvedValueOnce({
         ok: false as const,
-        cancelled: true,
-        error: 'Folder selection cancelled. The posture photos are still here.',
+        error: 'Disk full',
       })
       .mockResolvedValueOnce({
         ok: true as const,
         folder: '/tmp/motuscap-lite-save',
-        written: ['UG0001_Chan-Tai-Man_standing_F.png'],
+        written: ['UG0001__standing_F_annotated.png'],
         missing: [],
       });
     window.motuscapLite!.saveSubjectFolder = saveSubjectFolder;
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
+    renderPairApp();
     await waitFor(() =>
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
     );
@@ -2106,24 +1411,20 @@ describe('MotusCap Lite Phase 1 shell', () => {
     );
     fireEvent.click(screen.getByTestId('pair-simulate'));
     await waitFor(() =>
-      expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
+      expect(screen.queryByTestId('qr-box')).not.toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByTestId('pair-continue'));
+    await continueFromPair();
     await finishPostures();
     await waitFor(() =>
       expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
     );
     fireEvent.click(screen.getByTestId('subject-continue'));
-    fireEvent.click(screen.getByTestId('subject-folder-existing'));
     await waitFor(() =>
-      expect(
-        screen.queryByTestId('subject-folder-choice'),
-      ).not.toBeInTheDocument(),
+      expect(screen.getByRole('status')).toHaveTextContent('Disk full'),
     );
     expect(screen.queryByTestId('screen-capture')).not.toBeInTheDocument();
     expect(screen.getByTestId('subject-continue')).not.toBeDisabled();
     fireEvent.click(screen.getByTestId('subject-continue'));
-    fireEvent.click(screen.getByTestId('subject-folder-existing'));
     await waitFor(() =>
       expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
     );
@@ -2135,21 +1436,21 @@ describe('MotusCap Lite Phase 1 shell', () => {
     await goToCapture();
     expect(postureWrite.mock.calls[0]?.[0]).toBe('/tmp/motuscap-lite-save');
     const names = postureWrite.mock.calls[0]?.[1]?.map((f) => f.filename) ?? [];
-    expect(names).toContain('UG0001_Chan-Tai-Man_subject.csv');
-    expect(names).toContain('UG0001_Chan-Tai-Man_standing_F.png');
+    expect(names).toContain('UG0001__subject.csv');
+    expect(names).toContain('UG0001__standing_F_annotated.png');
   });
 
-  it('Phase 3: Capture → Review keeps all trials; Record another; Proceed to Pose; Save asks folder', async () => {
+  it('Phase 3: Capture → Review keeps all trials; Record another; Proceed to Pose and final report', async () => {
     await goToCapture();
 
     expect(screen.getByTestId('capture-sidebar')).toBeInTheDocument();
     expect(screen.getByTestId('capture-timer')).toHaveTextContent(
-      '00:00 / 03:00',
+      '00:00 / 00:20',
     );
     expect(screen.getByTestId('capture-pose-toggle')).toBeInTheDocument();
 
     // Start / stop first trial
-    fireEvent.click(screen.getByTestId('capture-start'));
+    await startCapture();
     await waitFor(() =>
       expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
     );
@@ -2188,15 +1489,8 @@ describe('MotusCap Lite Phase 1 shell', () => {
     // Record another → Capture; second trial kept in picker
     fireEvent.click(screen.getByTestId('review-record-another'));
     expect(screen.getByTestId('screen-capture')).toBeInTheDocument();
-    fireEvent.change(screen.getByTestId('capture-trial-name'), {
-      target: { value: 'gait02' },
-    });
-    await waitFor(() =>
-      expect(
-        (screen.getByTestId('capture-trial-name') as HTMLInputElement).value,
-      ).toBe('gait02'),
-    );
-    fireEvent.click(screen.getByTestId('capture-start'));
+    expect(screen.queryByTestId('capture-trial-name')).not.toBeInTheDocument();
+    await startCapture();
     await waitFor(() =>
       expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
     );
@@ -2219,34 +1513,51 @@ describe('MotusCap Lite Phase 1 shell', () => {
     // Proceed to Pose even if Phase 4 is stub
     fireEvent.click(screen.getByTestId('review-proceed-pose'));
     expect(screen.getByTestId('screen-pose')).toBeInTheDocument();
-    const saveVideos = screen.getByTestId('pose-save');
-    expect(saveVideos).toHaveTextContent('Save videos');
-    expect(saveVideos.className).toContain('btn-green');
-
-    // Videos go in the subject folder chosen on Save Subject & continue.
-    const chooseSpy = vi.spyOn(window.motuscapLite!, 'chooseSaveFolder');
-    const writeSpy = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
-    fireEvent.click(screen.getByTestId('pose-save'));
-    await waitFor(() => expect(writeSpy).toHaveBeenCalled());
-    expect(chooseSpy).not.toHaveBeenCalled();
-    const written = writeSpy.mock.calls[0]?.[1]?.map((f) => f.filename) ?? [];
-    expect(writeSpy.mock.calls[0]?.[0]).toBe('/tmp/motuscap-lite-save/gait02');
-    // Single-cam (1 device from goToCapture) → no view suffix on mp4
-    expect(written).toContain('UG0001_Chan-Tai-Man_gait02.mp4');
-    expect(written.some((f) => /_F\.mp4$/.test(f))).toBe(false);
-    expect(written.some((f) => f.includes('standing_'))).toBe(false);
-    expect(written.some((f) => f.endsWith('_IMU.csv'))).toBe(false);
-
-    chooseSpy.mockClear();
-    fireEvent.click(screen.getByTestId('pose-save'));
-    await waitFor(() => expect(writeSpy).toHaveBeenCalledTimes(2));
-    expect(chooseSpy).not.toHaveBeenCalled();
-    expect(writeSpy.mock.calls[1]?.[0]).toBe('/tmp/motuscap-lite-save/gait02');
+    expect(screen.queryByTestId('pose-save')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pose-export')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pose-save-note')).not.toBeInTheDocument();
+    const write = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
+    // A missing upload keeps Pose open, so the operator can retry safely.
+    vi.spyOn(mockClient, 'fetchUpload').mockResolvedValueOnce(null);
+    fireEvent.click(screen.getByTestId('pose-proceed-report'));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('VIDEO NOT SAVED'),
+    );
+    expect(screen.queryByTestId('screen-final-report')).not.toBeInTheDocument();
+    expect(screen.getByTestId('pose-proceed-report')).toBeEnabled();
+    write.mockClear();
+    fireEvent.click(screen.getByTestId('pose-proceed-report'));
+    await waitFor(() =>
+      expect(screen.getByTestId('screen-final-report')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('assessment-report')).toHaveTextContent(
+      'Example results',
+    );
+    expect(write.mock.calls.map(([folder]) => folder)).toEqual([
+      '/tmp/motuscap-lite-save/gait01',
+      '/tmp/motuscap-lite-save/gait02',
+    ]);
+    expect(write.mock.calls[0][1].map((file) => file.filename)).toContain(
+      'UG0001__gait01.mp4',
+    );
+    expect(write.mock.calls[1][1].map((file) => file.filename)).toContain(
+      'UG0001__gait02.mp4',
+    );
+    fireEvent.click(screen.getByTestId('report-back-pose'));
+    expect(screen.getByTestId('screen-pose')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pose-proceed-report'));
+    await waitFor(() =>
+      expect(screen.getByTestId('screen-final-report')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId('report-end-assessment'));
+    await waitFor(() =>
+      expect(screen.getByTestId('screen-cover')).toBeInTheDocument(),
+    );
   });
 
   it('trims every loaded view to one shared window and replaces the uploads', async () => {
     await goToCapture(2);
-    fireEvent.click(screen.getByTestId('capture-start'));
+    await startCapture();
     await waitFor(() =>
       expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
     );
@@ -2365,17 +1676,12 @@ describe('MotusCap Lite Phase 1 shell', () => {
   });
 
   it('Phase 3: 3-minute cap constant and Capture start disabled without cameras', async () => {
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
+    renderPairApp();
     // Jump via stepper is not available — open Capture only after pairing.
     // Without pairing, Continue is disabled; assert Capture start needs cams
     // by mocking devices empty after subject path is blocked.
     // Direct: pair 0 cams — stay on Pair.
-    expect(screen.getByTestId('pair-continue')).toBeDisabled();
+    expect(screen.getByTestId('pair-continue')).toBeEnabled();
 
     const { TRIAL_MAX_SECONDS, shouldAutoStop } = await import('./lib/sync');
     expect(TRIAL_MAX_SECONDS).toBe(180);
@@ -2384,12 +1690,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
   });
 
   it('Phase 5: IMU subset persists Pair → Capture → Review; empty panels; no fake traces', async () => {
-    renderRecordApp();
-    fireEvent.click(
-      within(screen.getByTestId('screen-session')).getByRole('button', {
-        name: 'Create session',
-      }),
-    );
+    renderPairApp();
     await waitFor(() =>
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument(),
     );
@@ -2422,16 +1723,16 @@ describe('MotusCap Lite Phase 1 shell', () => {
     );
     fireEvent.click(screen.getByTestId('pair-simulate'));
     await waitFor(() =>
-      expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
+      expect(screen.queryByTestId('qr-box')).not.toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByTestId('pair-continue'));
+    await continueFromPair();
     expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
     await finishPostures();
     await waitFor(() =>
       expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
     );
     fireEvent.click(screen.getByTestId('subject-continue'));
-    await chooseSubjectFolder('existing');
+
     await waitFor(() =>
       expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
     );
@@ -2449,7 +1750,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
     expect(captureImu.textContent).not.toMatch(/recalibrat/i);
 
     // Record → Review
-    fireEvent.click(screen.getByTestId('capture-start'));
+    await startCapture();
     await waitFor(() =>
       expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
     );
@@ -2481,7 +1782,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
     await goToCapture();
     expect(screen.queryByTestId('capture-imu-panel')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('capture-start'));
+    await startCapture();
     await waitFor(() =>
       expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
     );
@@ -2498,7 +1799,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
   it('Phase 4: Pose re-run fills selected trial; trial picker; export MediaPipe units', async () => {
     await goToCapture();
 
-    fireEvent.click(screen.getByTestId('capture-start'));
+    await startCapture();
     await waitFor(() =>
       expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
     );
@@ -2509,15 +1810,8 @@ describe('MotusCap Lite Phase 1 shell', () => {
 
     // Second trial so Pose picker has multiple options
     fireEvent.click(screen.getByTestId('review-record-another'));
-    fireEvent.change(screen.getByTestId('capture-trial-name'), {
-      target: { value: 'gait02' },
-    });
-    await waitFor(() =>
-      expect(
-        (screen.getByTestId('capture-trial-name') as HTMLInputElement).value,
-      ).toBe('gait02'),
-    );
-    fireEvent.click(screen.getByTestId('capture-start'));
+    expect(screen.queryByTestId('capture-trial-name')).not.toBeInTheDocument();
+    await startCapture();
     await waitFor(() =>
       expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
     );
@@ -2605,24 +1899,6 @@ describe('MotusCap Lite Phase 1 shell', () => {
       ),
     );
 
-    // Export 3D CSV uses raw MediaPipe metres and the per-view filename
-    const chooseSpy = vi.spyOn(window.motuscapLite!, 'chooseSaveFolder');
-    const writeSpy = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
-    fireEvent.click(screen.getByTestId('pose-export'));
-    fireEvent.click(screen.getByTestId('pose-export-csv3d-one'));
-    await waitFor(() => expect(writeSpy).toHaveBeenCalled());
-    expect(chooseSpy).not.toHaveBeenCalled();
-    expect(writeSpy.mock.calls[0]?.[0]).toBe('/tmp/motuscap-lite-save/gait01');
-    const files = writeSpy.mock.calls[0]?.[1] ?? [];
-    expect(files.map((f) => f.filename)).toEqual([
-      'UG0001_Chan-Tai-Man_gait01_pose3d.csv',
-    ]);
-    const csvBody = atob(files[0].base64);
-    expect(csvBody.split('\n')[0]).toMatch(/^Frame,FPS,left_shoulder_x,/);
-    expect(csvBody).toContain('-0.55');
-    expect(csvBody.startsWith('#')).toBe(false);
-    expect(csvBody.split('\n').length).toBeGreaterThan(10);
-
     // Footer navigation
     fireEvent.click(screen.getByTestId('pose-back-review'));
     expect(screen.getByTestId('screen-review')).toBeInTheDocument();
@@ -2631,9 +1907,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
     fireEvent.click(screen.getByTestId('review-proceed-pose'));
     fireEvent.click(screen.getByTestId('pose-record-another'));
     expect(screen.getByTestId('screen-capture')).toBeInTheDocument();
-    expect(
-      (screen.getByTestId('capture-trial-name') as HTMLInputElement).value,
-    ).toBe('gait02');
+    expect(screen.queryByTestId('capture-trial-name')).not.toBeInTheDocument();
   });
 
   it('Capture asks phones for fast previews even with pose off', async () => {
@@ -2657,16 +1931,11 @@ describe('MotusCap Lite Phase 1 shell', () => {
       const refresh = screen.getByTestId('capture-quality-refresh');
       await waitFor(() => expect(refresh).not.toBeDisabled());
 
-      fireEvent.click(
-        within(screen.getByTestId('capture-preview-toggle')).getByRole(
-          'checkbox',
-        ),
-      );
-      await waitFor(() =>
-        expect(spy).toHaveBeenCalledWith({ previewEnabled: false }),
-      );
+      expect(
+        screen.queryByTestId('capture-preview-toggle'),
+      ).not.toBeInTheDocument();
 
-      fireEvent.click(screen.getByTestId('capture-start'));
+      await startCapture();
       await waitFor(() =>
         expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
       );
@@ -2786,12 +2055,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
       .mockImplementation(() => new Promise(() => {}) as never);
 
     try {
-      renderRecordApp();
-      fireEvent.click(
-        within(screen.getByTestId('screen-session')).getByRole('button', {
-          name: 'Create session',
-        }),
-      );
+      renderPairApp();
       await waitFor(() =>
         expect(screen.getByTestId('pair-next')).not.toBeDisabled(),
       );
@@ -2801,31 +2065,25 @@ describe('MotusCap Lite Phase 1 shell', () => {
       );
       fireEvent.click(screen.getByTestId('pair-simulate'));
       await waitFor(() =>
-        expect(screen.getByTestId('pair-continue')).not.toBeDisabled(),
+        expect(screen.queryByTestId('qr-box')).not.toBeInTheDocument(),
       );
-      fireEvent.click(screen.getByTestId('pair-continue'));
+      await continueFromPair();
       expect(screen.getByTestId('screen-subject')).toBeInTheDocument();
       expect(screen.getByTestId('subject-back-pairing')).toHaveTextContent(
-        'Back to pairing',
+        'Pair cameras',
       );
       expect(
-        screen.queryByRole('button', { name: 'Pair cameras' }),
-      ).not.toBeInTheDocument();
+        screen.getByRole('button', { name: 'Pair cameras' }),
+      ).toBeInTheDocument();
 
       fireEvent.click(screen.getByTestId('subject-back-pairing'));
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
       expect(screen.getByText(/1 of 3 connected/)).toBeInTheDocument();
 
-      fireEvent.click(screen.getByTestId('pair-continue'));
+      await continueFromPair();
       await waitFor(() =>
         expect(screen.getByTestId('standing-capture-now')).toBeInTheDocument(),
       );
-      fireEvent.change(screen.getByTestId('subject-height'), {
-        target: { value: '172' },
-      });
-      fireEvent.change(screen.getByTestId('subject-weight'), {
-        target: { value: '68' },
-      });
       fireEvent.click(screen.getByTestId('standing-capture-now'));
       await waitFor(() =>
         expect(screen.getByTestId('guide-countdown').textContent).toMatch(/\d/),
@@ -2842,13 +2100,13 @@ describe('MotusCap Lite Phase 1 shell', () => {
       fireEvent.click(screen.getByTestId('subject-back-pairing-leave'));
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
 
-      fireEvent.click(screen.getByTestId('pair-continue'));
+      await continueFromPair();
       await finishPostures();
       await waitFor(() =>
         expect(screen.getByTestId('subject-continue')).not.toBeDisabled(),
       );
       fireEvent.click(screen.getByTestId('subject-continue'));
-      await chooseSubjectFolder('existing');
+
       await waitFor(() =>
         expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
       );
@@ -2860,16 +2118,19 @@ describe('MotusCap Lite Phase 1 shell', () => {
         screen.queryByRole('button', { name: '← Subject' }),
       ).not.toBeInTheDocument();
 
+      const capturePage = screen.getByTestId('screen-capture');
       fireEvent.click(screen.getByTestId('capture-pair-cameras'));
+      expect(capturePage).not.toBeVisible();
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
       expect(screen.getByText(/1 of 3 connected/)).toBeInTheDocument();
 
-      fireEvent.click(screen.getByTestId('pair-continue'));
-      fireEvent.click(screen.getByTestId('subject-continue'));
+      await continueFromPair();
+      expect(screen.getByTestId('screen-capture')).toBe(capturePage);
+      expect(capturePage).toBeVisible();
       await waitFor(() =>
         expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
       );
-      fireEvent.click(screen.getByTestId('capture-start'));
+      await startCapture();
       await waitFor(() =>
         expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
       );
@@ -2900,12 +2161,12 @@ describe('MotusCap Lite Phase 1 shell', () => {
       expect(stopTrial).toHaveBeenCalled();
       expect(screen.getByText(/1 of 3 connected/)).toBeInTheDocument();
 
-      fireEvent.click(screen.getByTestId('pair-continue'));
-      fireEvent.click(screen.getByTestId('subject-continue'));
+      await continueFromPair();
+      expect(screen.getByTestId('screen-capture')).toBeInTheDocument();
       await waitFor(() =>
         expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
       );
-      fireEvent.click(screen.getByTestId('capture-start'));
+      await startCapture();
       await waitFor(() =>
         expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
       );
@@ -2921,12 +2182,13 @@ describe('MotusCap Lite Phase 1 shell', () => {
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
       expect(screen.getByText(/1 of 3 connected/)).toBeInTheDocument();
 
-      fireEvent.click(screen.getByTestId('pair-continue'));
-      fireEvent.click(screen.getByTestId('subject-continue'));
+      await continueFromPair();
+      expect(screen.getByTestId('screen-review')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('review-record-another'));
       await waitFor(() =>
         expect(screen.getByTestId('screen-capture')).toBeInTheDocument(),
       );
-      fireEvent.click(screen.getByTestId('capture-start'));
+      await startCapture();
       await waitFor(() =>
         expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
       );
@@ -2952,6 +2214,14 @@ describe('MotusCap Lite Phase 1 shell', () => {
       );
       fireEvent.click(screen.getByTestId('pose-pair-cameras-stay'));
       expect(screen.getByTestId('screen-pose')).toBeInTheDocument();
+      const posePage = screen.getByTestId('screen-pose');
+      fireEvent.click(screen.getByTestId('pose-pair-cameras'));
+      fireEvent.click(screen.getByTestId('pose-pair-cameras-leave'));
+      expect(posePage).not.toBeVisible();
+      fireEvent.click(screen.getByTestId('pair-continue'));
+      expect(screen.getByTestId('screen-pose')).toBe(posePage);
+      expect(posePage).toBeVisible();
+      expect(screen.getByTestId('pose-rerun')).toHaveTextContent('Re-running');
       fireEvent.click(screen.getByTestId('pose-back-review'));
       fireEvent.click(screen.getByTestId('pose-back-review-leave'));
       expect(screen.getByTestId('screen-review')).toBeInTheDocument();
@@ -2960,6 +2230,8 @@ describe('MotusCap Lite Phase 1 shell', () => {
       fireEvent.click(screen.getByTestId('pose-pair-cameras'));
       expect(screen.getByTestId('screen-pair')).toBeInTheDocument();
       expect(screen.getByText(/1 of 3 connected/)).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('pair-continue'));
+      expect(screen.getByTestId('screen-pose')).toBeVisible();
     } finally {
       mockClient.stopTrial = originalStop;
       poseSpy.mockRestore();
@@ -2967,183 +2239,6 @@ describe('MotusCap Lite Phase 1 shell', () => {
   });
 
   describe('recording countdown and upload status', () => {
-    const delayedStart = (leadMs: number) => {
-      const original = mockClient.startTrial;
-      mockClient.startTrial = async () => ({
-        ok: true,
-        start_signal: {
-          trialId: 'tr_x',
-          trialName: 'gait01',
-          startAtMs: Date.now() + leadMs,
-          maxDurationMs: 180_000,
-        },
-      });
-      return () => {
-        mockClient.startTrial = original;
-      };
-    };
-
-    it('shows preparation immediately and prevents duplicate starts', async () => {
-      const restore = delayedStart(3000);
-      let releaseArm = () => {};
-      const pendingArm = new Promise<{ ok: boolean }>((resolve) => {
-        releaseArm = () => resolve({ ok: true });
-      });
-      const arm = vi.spyOn(mockClient, 'armTrial').mockReturnValue(pendingArm);
-      const create = vi.spyOn(mockClient, 'createTrial');
-      const start = vi.spyOn(mockClient, 'startTrial');
-      try {
-        await goToCapture();
-        fireEvent.click(screen.getByTestId('capture-start'));
-        expect(screen.getByTestId('capture-start-banner')).toHaveTextContent(
-          'Preparing cameras…',
-        );
-        expect(screen.getByTestId('capture-start-banner')).toHaveTextContent(
-          'Ask the subject to wait',
-        );
-        expect(screen.getByTestId('capture-start')).toBeDisabled();
-        expect(
-          screen.queryByTestId('capture-countdown'),
-        ).not.toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('capture-start'));
-        expect(create).toHaveBeenCalledTimes(1);
-        expect(start).not.toHaveBeenCalled();
-
-        await act(async () => releaseArm());
-        expect(screen.getByTestId('capture-countdown')).toHaveTextContent('3');
-        expect(start).toHaveBeenCalledTimes(1);
-      } finally {
-        releaseArm();
-        arm.mockRestore();
-        create.mockRestore();
-        start.mockRestore();
-        restore();
-      }
-    });
-
-    it('clears preparation and allows retry when starting fails', async () => {
-      const arm = vi
-        .spyOn(mockClient, 'armTrial')
-        .mockRejectedValueOnce(new Error('Camera unavailable'));
-      try {
-        await goToCapture();
-        await act(async () => {
-          fireEvent.click(screen.getByTestId('capture-start'));
-        });
-        expect(screen.getByRole('status')).toHaveTextContent(
-          'Camera unavailable',
-        );
-        expect(screen.getByTestId('capture-start')).not.toBeDisabled();
-        expect(
-          screen.queryByTestId('capture-start-banner'),
-        ).not.toBeInTheDocument();
-        expect(
-          screen.queryByText('Ask the subject to start moving now'),
-        ).not.toBeInTheDocument();
-      } finally {
-        arm.mockRestore();
-      }
-    });
-
-    it('counts down 3, 2, 1 before recording, and Stop then cancels', async () => {
-      const restore = delayedStart(3000);
-      const originalStop = mockClient.stopTrial;
-      const originalCancel = mockClient.cancelTrial;
-      const stopTrial = vi.fn(async () => ({ ok: true }));
-      const cancelTrial = vi.fn(async () => ({ ok: true }));
-      mockClient.stopTrial = stopTrial;
-      mockClient.cancelTrial = cancelTrial;
-      try {
-        await goToCapture();
-        vi.useFakeTimers();
-        await act(async () => {
-          fireEvent.click(screen.getByTestId('capture-start'));
-        });
-        expect(screen.getByTestId('capture-countdown')).toHaveTextContent(
-          /^3$/,
-        );
-        expect(screen.getByTestId('capture-start-banner')).toHaveTextContent(
-          'Ask the subject to wait',
-        );
-        expect(screen.queryByText('REC')).not.toBeInTheDocument();
-        await act(async () => vi.advanceTimersByTime(1000));
-        expect(screen.getByTestId('capture-countdown')).toHaveTextContent(
-          /^2$/,
-        );
-        await act(async () => vi.advanceTimersByTime(1000));
-        expect(screen.getByTestId('capture-countdown')).toHaveTextContent(
-          /^1$/,
-        );
-        expect(screen.getByTestId('capture-timer')).toHaveTextContent(
-          '00:00 / 03:00',
-        );
-        expect(screen.getByTestId('capture-stop')).toHaveTextContent(
-          'Cancel start',
-        );
-        await act(async () => {
-          fireEvent.click(screen.getByTestId('capture-stop'));
-        });
-        expect(screen.getByTestId('capture-start')).not.toBeDisabled();
-        expect(cancelTrial).toHaveBeenCalledWith('tr_1');
-        expect(stopTrial).not.toHaveBeenCalled();
-        expect(screen.getByTestId('screen-capture')).toBeInTheDocument();
-        expect(
-          screen.queryByTestId('capture-countdown'),
-        ).not.toBeInTheDocument();
-        expect(
-          screen.queryByTestId('capture-start-banner'),
-        ).not.toBeInTheDocument();
-        expect(screen.getByRole('status')).toHaveTextContent(
-          'Start cancelled — nothing was recorded',
-        );
-      } finally {
-        vi.useRealTimers();
-        restore();
-        mockClient.stopTrial = originalStop;
-        mockClient.cancelTrial = originalCancel;
-      }
-    });
-
-    it('shows the movement cue with REC at the shared start for three seconds', async () => {
-      const restore = delayedStart(3000);
-      try {
-        await goToCapture();
-        vi.useFakeTimers();
-        await act(async () => {
-          fireEvent.click(screen.getByTestId('capture-start'));
-        });
-        expect(screen.getByTestId('capture-countdown')).toHaveTextContent(
-          /^3$/,
-        );
-        await act(async () => vi.advanceTimersByTime(2800));
-        expect(
-          screen.queryByText('Ask the subject to start moving now'),
-        ).not.toBeInTheDocument();
-        await act(async () => vi.advanceTimersByTime(200));
-        expect(
-          screen.queryByTestId('capture-countdown'),
-        ).not.toBeInTheDocument();
-        expect(screen.getByTestId('capture-start-banner')).toHaveTextContent(
-          'Ask the subject to start moving now',
-        );
-        expect(screen.getByTestId('capture-start-banner')).toHaveClass(
-          'capture-start-banner-go',
-        );
-        expect(screen.getByText('REC')).toBeInTheDocument();
-        expect(screen.getByTestId('capture-stop')).toHaveTextContent('Stop');
-        await act(async () => vi.advanceTimersByTime(2800));
-        expect(screen.getByTestId('capture-start-banner')).toBeInTheDocument();
-        await act(async () => vi.advanceTimersByTime(200));
-        expect(
-          screen.queryByTestId('capture-start-banner'),
-        ).not.toBeInTheDocument();
-        expect(screen.getByTestId('capture-timer')).toHaveTextContent('00:03');
-      } finally {
-        vi.useRealTimers();
-        restore();
-      }
-    });
-
     it('Review shows transfer progress in each tile, then the video', async () => {
       await goToCapture();
       const dev = devices[0].device_id;
@@ -3153,7 +2248,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
         totalBytes: 100,
         filename: 'a.webm',
       });
-      fireEvent.click(screen.getByTestId('capture-start'));
+      await startCapture();
       await waitFor(() =>
         expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
       );
@@ -3227,7 +2322,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
       });
       try {
         byTrial.set('tr_1', { status: 'failed', error: 'aborted' });
-        fireEvent.click(screen.getByTestId('capture-start'));
+        await startCapture();
         await waitFor(() =>
           expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
         );
@@ -3244,7 +2339,7 @@ describe('MotusCap Lite Phase 1 shell', () => {
 
         fireEvent.click(screen.getByTestId('review-record-another'));
         byTrial.set('tr_2', { status: 'uploading' });
-        fireEvent.click(screen.getByTestId('capture-start'));
+        await startCapture();
         await waitFor(() =>
           expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
         );
@@ -3260,91 +2355,6 @@ describe('MotusCap Lite Phase 1 shell', () => {
         );
       } finally {
         mockClient.getTrial = original;
-      }
-    });
-
-    it('Save waits for an upload and names the camera that failed', async () => {
-      await goToCapture();
-      const dev = devices[0].device_id;
-      fireEvent.click(screen.getByTestId('capture-start'));
-      await waitFor(() =>
-        expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('capture-stop'));
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-review')).toBeInTheDocument(),
-      );
-      uploads.set(dev, { status: 'uploading', bytes: 0, filename: 'a' });
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-
-      const writeSpy = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
-      const originalDelete = mockClient.deleteRecordings;
-      const deleteRecordings = vi.fn(async () => ({ ok: true }));
-      mockClient.deleteRecordings = deleteRecordings;
-      try {
-        fireEvent.click(screen.getByTestId('pose-save'));
-        await waitFor(() =>
-          expect(screen.getByTestId('pose-save-note')).toHaveTextContent(
-            'Waiting for videos · Cam 1: Uploading…',
-          ),
-        );
-        expect(screen.getByTestId('pose-save')).toBeDisabled();
-        expect(writeSpy).not.toHaveBeenCalled();
-
-        uploads.set(dev, {
-          status: 'failed',
-          bytes: 0,
-          filename: 'a',
-          error: 'Network lost',
-        });
-        await waitFor(() => expect(writeSpy).toHaveBeenCalled(), {
-          timeout: 3000,
-        });
-        const written = writeSpy.mock.calls[0][1].map((f) => f.filename);
-        expect(written.some((f) => f.endsWith('.mp4'))).toBe(false);
-        expect(written.some((f) => f.includes('standing_'))).toBe(false);
-        expect(writeSpy.mock.calls[0][0]).toBe(
-          '/tmp/motuscap-lite-save/gait01',
-        );
-        await waitFor(() =>
-          expect(screen.getByRole('status')).toHaveTextContent(
-            'VIDEO NOT SAVED: Cam 1 (Network lost)',
-          ),
-        );
-        expect(screen.getByTestId('pose-save-note')).toHaveTextContent(
-          '1 video(s) not saved',
-        );
-        expect(deleteRecordings).not.toHaveBeenCalled();
-      } finally {
-        mockClient.deleteRecordings = originalDelete;
-      }
-    });
-
-    it('a complete Save clears the trial’s temp videos', async () => {
-      await goToCapture();
-      fireEvent.click(screen.getByTestId('capture-start'));
-      await waitFor(() =>
-        expect(screen.getByTestId('capture-stop')).not.toBeDisabled(),
-      );
-      fireEvent.click(screen.getByTestId('capture-stop'));
-      await waitFor(() =>
-        expect(screen.getByTestId('screen-review')).toBeInTheDocument(),
-      );
-      fireEvent.click(screen.getByTestId('review-proceed-pose'));
-      const originalDelete = mockClient.deleteRecordings;
-      const deleteRecordings = vi.fn(async () => ({ ok: true }));
-      mockClient.deleteRecordings = deleteRecordings;
-      const writeSpy = vi.spyOn(window.motuscapLite!, 'writeSaveFiles');
-      try {
-        fireEvent.click(screen.getByTestId('pose-save'));
-        await waitFor(() =>
-          expect(deleteRecordings).toHaveBeenCalledWith('tr_1'),
-        );
-        expect(writeSpy.mock.calls[0][1].map((f) => f.filename)).toContain(
-          'UG0001_Chan-Tai-Man_gait01.mp4',
-        );
-      } finally {
-        mockClient.deleteRecordings = originalDelete;
       }
     });
   });

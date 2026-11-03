@@ -8,6 +8,8 @@ import { CAM_MAX, canPairMore } from './roles';
 export type PairingStatus = 'pending' | 'completed' | 'expired' | 'cancelled';
 
 export type PairedDevice = {
+  source?: 'usb';
+  localCameraId?: string;
   deviceId: string;
   name: string;
   camIndex: number;

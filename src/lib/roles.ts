@@ -1,5 +1,5 @@
 /**
- * Camera view roles for MotusCap Lite.
+ * Camera view roles for KneeVidScan-Desktop.
  * Cam1 Frontal (F), Cam2 Lateral right (L), Cam3 Additional (O).
  * Single camera: no view suffix in filenames.
  */

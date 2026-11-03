@@ -6,11 +6,16 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    name: 'MotusCap Lite',
-    executableName: 'motuscap-lite',
+    extendInfo: {
+      NSCameraUsageDescription:
+        'KneeVidScan uses connected cameras to capture standing photos and assessment recordings.',
+    },
+    name: 'KneeVidScan-Desktop',
+    executableName: 'KneeVidScan-Desktop',
+    icon: 'assets/branding/kneevidscan',
     // Offline MediaPipe WASM + pose model, served by the local backend.
     // ffmpeg turns WebM phone uploads into H.264 MP4.
-    extraResource: ['assets/mediapipe', 'assets/ffmpeg'],
+    extraResource: ['assets/mediapipe', 'assets/ffmpeg', 'assets/branding'],
   },
   rebuildConfig: {},
   makers: [
@@ -18,8 +23,9 @@ const config: ForgeConfig = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        name: 'MotusCapLite',
-        setupExe: 'MotusCap-Lite-Setup.exe',
+        name: 'KneeVidScanDesktop',
+        setupExe: 'KneeVidScan-Desktop-Setup.exe',
+        setupIcon: 'assets/branding/kneevidscan.ico',
       },
     },
     {
@@ -27,8 +33,14 @@ const config: ForgeConfig = {
       platforms: ['darwin'],
       config: {},
     },
-    { name: '@electron-forge/maker-rpm', config: {} },
-    { name: '@electron-forge/maker-deb', config: {} },
+    {
+      name: '@electron-forge/maker-rpm',
+      config: { options: { icon: 'assets/branding/kneevidscan.png' } },
+    },
+    {
+      name: '@electron-forge/maker-deb',
+      config: { options: { icon: 'assets/branding/kneevidscan.png' } },
+    },
   ],
   plugins: [
     new VitePlugin({

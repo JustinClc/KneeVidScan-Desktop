@@ -1,5 +1,5 @@
 /**
- * MotusCap Lite local backend — pairing, shared start, preview, PWA over HTTPS.
+ * KneeVidScan-Desktop local backend — pairing, shared start, preview, PWA over HTTPS.
  */
 
 import { createReadStream } from 'node:fs';
@@ -466,6 +466,25 @@ async function handleApi(
     return true;
   }
 
+  if (method === 'POST' && url.pathname === '/v1/usb-cameras') {
+    const body = await readJson(req);
+    const result = store.connectUsbCamera(
+      typeof body.camera_id === 'string' ? body.camera_id : '',
+      typeof body.name === 'string' ? body.name : '',
+    );
+    if (!result.ok) {
+      sendJson(res, 409, { error: result.error });
+    } else {
+      sendJson(res, 201, {
+        device_id: result.deviceId,
+        device_pairing_token: result.devicePairingToken,
+        cam_index: result.camIndex,
+        view_code: result.viewCode,
+      });
+    }
+    return true;
+  }
+
   // Devices list / delete
   if (method === 'GET' && url.pathname === '/v1/devices') {
     sendJson(res, 200, {
@@ -476,6 +495,7 @@ async function handleApi(
         view_code: d.viewCode,
         paired_at: d.pairedAt,
         has_preview: store.previews.has(d.deviceId),
+        ...(d.source ? { source: d.source } : {}),
       })),
     });
     return true;
@@ -987,6 +1007,7 @@ async function handleApi(
       trial: {
         trial_id: active.id,
         name: active.name,
+        participants: active.participants,
         phase: active.phase,
         start_signal: active.startSignal
           ? {
@@ -1034,7 +1055,17 @@ async function handleApi(
     }
 
     if (method === 'POST' && parts[3] === 'start') {
-      const signal = store.startTrial(trialId);
+      const body = await readJson(req);
+      const custom =
+        body.leadMs !== undefined || body.maxDurationMs !== undefined;
+      if (custom && (body.leadMs !== 5000 || body.maxDurationMs !== 20000)) {
+        sendJson(res, 400, { error: 'Invalid sit-to-stand recording timing' });
+        return true;
+      }
+      const signal = store.startTrial(
+        trialId,
+        custom ? { leadMs: 5000, maxDurationMs: 20000 } : undefined,
+      );
       if (!signal) {
         sendJson(res, 404, { error: 'Trial not found' });
         return true;
@@ -1278,7 +1309,7 @@ async function handleApi(
       return true;
     }
 
-    // Replace an accepted crop + original together, only after receiving both.
+    // Replace an accepted annotated preview + clean original together, only after receiving both.
     if (
       method === 'POST' &&
       parts[3] === 'standing' &&

@@ -98,7 +98,7 @@ export function planSessionSave(opts: {
 }
 
 /**
- * Six posture files for one subject: cropped F/LL/RL plus each `_full` original.
+ * Six posture files: blurred, annotated F/LL/RL plus each clean `_full` original.
  * Names have no trial, so a later save overwrites the same files.
  */
 export function planPosturePhotos(opts: {

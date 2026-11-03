@@ -13,6 +13,12 @@ import {
   detectGapMs,
 } from '../lib/framePacing';
 import { containFit } from '../lib/standingGate';
+import {
+  SITTING_GUIDE_RECT,
+  checkSitting,
+  POSE_FRESH_MS,
+  type SittingCheck,
+} from '../lib/sitToStand';
 import { useBoxSize } from '../lib/useBoxSize';
 import type { SessionDevice } from '../state/SessionContext';
 
@@ -44,6 +50,7 @@ type Props = {
   fitFrame?: boolean;
   /** When false, skip preview long-poll and show a placeholder. */
   previewEnabled?: boolean;
+  onSittingCheck?: (check: SittingCheck) => void;
 };
 
 export function CamFeed({
@@ -57,9 +64,15 @@ export function CamFeed({
   liveTag,
   fitFrame,
   previewEnabled = true,
+  onSittingCheck,
 }: Props) {
   useLocale();
   const label = camLabel(camCount, index);
+  const sittingCallback = useRef(onSittingCheck);
+  sittingCallback.current = onSittingCheck;
+  const checkSittingEnabled = !!onSittingCheck;
+  const [sittingReady, setSittingReady] = useState(false);
+  const lastPoseFrame = useRef(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [poseStatus, setPoseStatus] = useState<PoseStatus>('loading');
   const [frame, setFrame] = useState<{ w: number; h: number } | null>(null);
@@ -73,7 +86,7 @@ export function CamFeed({
   const cell = useBoxSize(cellRef);
 
   useEffect(() => {
-    if (!showPose) {
+    if (!showPose && !checkSittingEnabled) {
       landmarkerRef.current = null;
       return;
     }
@@ -83,11 +96,34 @@ export function CamFeed({
       if (cancelled) return;
       landmarkerRef.current = lm;
       setPoseStatus(lm ? 'no-person' : 'unavailable');
+      if (!lm)
+        sittingCallback.current?.({
+          ready: false,
+          message:
+            'Pose detection unavailable. Check the local pose model assets and reconnect the camera.',
+        });
     });
     return () => {
       cancelled = true;
     };
-  }, [showPose]);
+  }, [showPose, checkSittingEnabled]);
+
+  useEffect(() => {
+    if (!checkSittingEnabled) return;
+    const timer = window.setInterval(() => {
+      if (
+        poseStatus !== 'unavailable' &&
+        Date.now() - lastPoseFrame.current > POSE_FRESH_MS
+      ) {
+        setSittingReady(false);
+        sittingCallback.current?.({
+          ready: false,
+          message: t('Waiting for a clear side view of your seated posture.'),
+        });
+      }
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [checkSittingEnabled, poseStatus]);
 
   // Live (Capture): long-poll each new phone frame. Otherwise light polling.
   useEffect(() => {
@@ -174,7 +210,7 @@ export function CamFeed({
 
     const lm = landmarkerRef.current;
     const canvas = canvasRef.current;
-    if (!showPose || !lm || !canvas) return;
+    if ((!showPose && !checkSittingEnabled) || !lm) return;
     // The picture updates every frame; the skeleton keeps the last result
     // until the next detection slot.
     const gap = detectGapMs(
@@ -191,6 +227,13 @@ export function CamFeed({
       landmarks = null;
     }
     lastDetectMs.current = performance.now() - now;
+    if (checkSittingEnabled) {
+      lastPoseFrame.current = Date.now();
+      const check = checkSitting(landmarks, fw, fh);
+      setSittingReady(check.ready);
+      sittingCallback.current?.(check);
+    }
+    if (!showPose || !canvas) return;
     const feed = canvas.parentElement;
     const w = feed?.clientWidth || 320;
     const h = feed?.clientHeight || 240;
@@ -225,9 +268,11 @@ export function CamFeed({
         }
       : undefined;
 
+  const sittingRect = SITTING_GUIDE_RECT;
+
   const tile = (
     <div
-      className={`cam${recording ? ' recording' : ''}${fitFrame ? ' fit' : ''}`}
+      className={`cam${recording ? ' recording' : ''}${fitFrame ? ' fit' : ''}${checkSittingEnabled ? ' sitting-camera' : ''}`}
       style={tileStyle}
     >
       <div className="feed" data-testid={`cam-feed-${index}`}>
@@ -246,6 +291,36 @@ export function CamFeed({
             draggable={false}
             onLoad={(e) => onFrame(e.currentTarget)}
           />
+        ) : null}
+        {checkSittingEnabled ? (
+          <>
+            {sittingRect ? (
+              <div
+                className={`sitting-guide${sittingReady ? ' ready' : ''}`}
+                data-testid="sitting-guide"
+                data-ready={sittingReady ? '1' : '0'}
+                aria-label={t(
+                  sittingReady
+                    ? 'Seated position ready'
+                    : 'Adjust your seated position',
+                )}
+                style={{
+                  left: `${sittingRect.x * 100}%`,
+                  top: `${sittingRect.y * 100}%`,
+                  width: `${sittingRect.w * 100}%`,
+                  height: `${sittingRect.h * 100}%`,
+                }}
+              />
+            ) : null}
+            <div
+              className="sit-motion-placeholder"
+              data-testid="sit-motion-placeholder"
+            >
+              <span aria-hidden="true">↕</span>
+              <span>{t('Sit-to-stand motion')}</span>
+              <small>{t('GIF coming soon')}</small>
+            </div>
+          </>
         ) : null}
         {showPose ? (
           <canvas
@@ -294,6 +369,8 @@ export function CamGrid({
   liveTag,
   fitFrame,
   previewEnabled = true,
+  sittingCameraIndex,
+  onSittingCheck,
 }: {
   camCount: number;
   devices?: SessionDevice[];
@@ -305,6 +382,8 @@ export function CamGrid({
   liveTag?: boolean;
   fitFrame?: boolean;
   previewEnabled?: boolean;
+  sittingCameraIndex?: number;
+  onSittingCheck?: (check: SittingCheck) => void;
 }) {
   return (
     <div
@@ -326,6 +405,7 @@ export function CamGrid({
           liveTag={liveTag}
           fitFrame={fitFrame}
           previewEnabled={previewEnabled}
+          onSittingCheck={i === sittingCameraIndex ? onSittingCheck : undefined}
         />
       ))}
     </div>

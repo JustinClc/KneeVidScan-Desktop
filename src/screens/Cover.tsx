@@ -1,3 +1,5 @@
+import { CameraPairingButton } from '../components/CameraPairingButton';
+import logo from '../../assets/branding/kneevidscan.png';
 import { useLocale } from '../lib/useLocale';
 import { useSession } from '../state/SessionContext';
 
@@ -36,54 +38,31 @@ export function Cover() {
           </select>
         </label>
         <div className="cover-intro">
-          <h1>MotusCap Lite</h1>
-          <p className="sub">{t('Motion capture for lab sessions')}</p>
+          <img className="cover-logo" src={logo} alt="KneeVidScan logo" />
+          <h1>{t('KneeVidScan-Desktop')}</h1>
+          <p className="sub">{t('Record and analyse motion')}</p>
+          <p className="cover-sub">
+            {t(
+              'Complete the questionnaire, take standing photos, record trials, then run pose estimation.',
+            )}
+          </p>
         </div>
-        <div className="cover-grid">
-          <article className="cover-card">
-            <div className="cover-icon" aria-hidden="true">
-              ◎
-            </div>
-            <h2>{t('Record and analyse motion')}</h2>
-            <p className="cover-sub">
-              {t(
-                'Pair cameras, take standing postures, record trials, then run pose estimation.',
-              )}
-            </p>
-            <button
-              type="button"
-              className="btn btn-primary"
-              data-testid="cover-start-recording"
-              onClick={() => {
-                setFlow('record');
-                go(1);
-              }}
-            >
-              {t('Start recording')}
-            </button>
-          </article>
-          <article className="cover-card">
-            <div className="cover-icon" aria-hidden="true">
-              ⬆
-            </div>
-            <h2>{t('Upload an existing MP4')}</h2>
-            <p className="cover-sub">
-              {t(
-                'Import one motion video for pose analysis without a live capture.',
-              )}
-            </p>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              data-testid="cover-upload-media"
-              onClick={() => {
-                setFlow('upload');
-                go(9);
-              }}
-            >
-              {t('Upload media')}
-            </button>
-          </article>
+        <div className="cover-actions">
+          <button
+            type="button"
+            className="btn btn-primary cover-start"
+            data-testid="cover-start-recording"
+            onClick={() => {
+              setFlow('record');
+              go(1);
+            }}
+          >
+            {t('Start Assessment')}
+          </button>
+          <CameraPairingButton
+            testId="home-pair-cameras"
+            className="btn btn-secondary cover-pair"
+          />
         </div>
       </div>
     </section>

@@ -11,8 +11,12 @@ import {
 } from 'react';
 import { getLocale, t } from '../lib/locale';
 import type { ScreenId } from '../lib/steps';
+import {
+  emptyQuestionnaire,
+  type QuestionnaireAnswers,
+} from '../lib/questionnaire';
 
-export type SessionFlow = 'home' | 'record' | 'upload';
+export type SessionFlow = 'home' | 'record';
 import type { StandingCode } from '../lib/naming';
 import { IMU_SLOT_IDS, type ImuSlotId, toggleImuSlot } from '../lib/imu';
 import {
@@ -21,10 +25,12 @@ import {
   type PairingCreated,
   type SessionSnapshot,
 } from '../lib/backendClient';
+import { UsbCamera, recorderMime } from '../lib/usbCamera';
 import type { TrialPoseResult } from '../lib/fullResPose';
 import { disposeTrialPoseResult } from '../lib/fullResPose';
 
 export type SessionDevice = {
+  source?: 'usb';
   deviceId: string;
   name: string;
   camIndex: number;
@@ -77,11 +83,16 @@ export type SessionTrial = {
 
 export type SessionState = {
   screen: ScreenId;
-  /** Cover is home. Record and upload each have their own step rail. */
+  pairingReturnScreen: Exclude<ScreenId, 2>;
+  /** Home leads to the capture and recording step rail. */
   flow: SessionFlow;
   sessionName: string;
   sessionNotes: string;
+  questionnaire: QuestionnaireAnswers;
+  questionnaireCompleted: boolean;
   camCount: number;
+  usbCameraErrors: Record<string, string>;
+  usbHardwareIds: string[];
   devices: SessionDevice[];
   activePairing: ActivePairing | null;
   qrActive: boolean;
@@ -130,16 +141,13 @@ export type SessionState = {
 
 type SessionActions = {
   go: (screen: ScreenId) => void;
+  openCameraPairing: () => void;
+  closeCameraPairing: () => void;
   setFlow: (flow: SessionFlow) => void;
-  /** Upload path: this trial replaces the session list. */
-  replaceTrials: (trial: SessionTrial) => void;
-  /**
-   * Drop the imported file, trim, and pose result.
-   * Subject ID and name stay so another video can be uploaded.
-   */
-  clearUploadCapture: () => void;
   setSessionName: (v: string) => void;
   setSessionNotes: (v: string) => void;
+  setQuestionnaire: (v: QuestionnaireAnswers) => void;
+  setQuestionnaireCompleted: (value: boolean) => void;
   setCamCount: (n: number) => void;
   setQrActive: (v: boolean) => void;
   /** Replace the connected IMU subset (UI mock only). */
@@ -159,11 +167,9 @@ type SessionActions = {
   markStandingCaptured: (code: StandingCode, filename: string) => void;
   resetStanding: () => void;
   loadExistingDemoSubject: () => void;
-  /** Forget this session's subject, photos, folder, and trials. Cameras stay paired. */
-  startNewSubject: () => void;
   /**
    * Cover (Home) with the operator session back to its initial values.
-   * Language and the live backend connection stay. Files already written
+   * Language, paired cameras, IMUs, and the live backend connection stay. Files already written
    * to disk stay. Bumps `sessionEpoch` so an in-flight save or export
    * does not write its result back into the fresh session.
    */
@@ -189,6 +195,7 @@ type SessionActions = {
   /** Optional durationMs — longer for Save warnings (missing uploads). */
   showToast: (msg: string, durationMs?: number) => void;
   refreshDevices: () => Promise<void>;
+  connectUsbCamera: (cameraId: string, label: string) => Promise<void>;
   /** Pass `replaceDeviceId` to re-pair that camera in its current slot. */
   startPairing: (
     publicBaseUrl?: string,
@@ -240,6 +247,7 @@ function mapDevices(
     if ('deviceId' in d) return d;
     return {
       deviceId: d.device_id,
+      source: d.source,
       name: d.name,
       camIndex: d.cam_index,
       viewCode: d.view_code,
@@ -253,6 +261,7 @@ function sameDevices(a: SessionDevice[], b: SessionDevice[]): boolean {
     a.every(
       (d, i) =>
         d.deviceId === b[i].deviceId &&
+        d.source === b[i].source &&
         d.name === b[i].name &&
         d.camIndex === b[i].camIndex &&
         d.viewCode === b[i].viewCode,
@@ -262,10 +271,15 @@ function sameDevices(a: SessionDevice[], b: SessionDevice[]): boolean {
 
 const initial: SessionState = {
   screen: 0,
+  pairingReturnScreen: 0,
   flow: 'home',
   sessionName: 'Lab session — gait pilot',
   sessionNotes: 'Indoor lab, 2× iPhone',
+  questionnaire: emptyQuestionnaire(),
+  questionnaireCompleted: false,
   camCount: 0,
+  usbCameraErrors: {},
+  usbHardwareIds: [],
   devices: [],
   activePairing: null,
   qrActive: false,
@@ -300,6 +314,36 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const sessionEpoch = useRef(0);
+  const usbCameras = useRef(new Map<string, UsbCamera>());
+  const usbConnecting = useRef(false);
+
+  useEffect(
+    () => () => {
+      usbCameras.current.forEach((camera) => camera.dispose());
+      usbCameras.current.clear();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    for (const [id, camera] of usbCameras.current) {
+      if (!state.devices.some((device) => device.deviceId === id)) {
+        camera.dispose();
+        usbCameras.current.delete(id);
+        setState((s) => {
+          const errors = { ...s.usbCameraErrors };
+          delete errors[id];
+          return {
+            ...s,
+            usbCameraErrors: errors,
+            usbHardwareIds: [...usbCameras.current.values()].map(
+              (c) => c.hardwareId,
+            ),
+          };
+        });
+      }
+    }
+  }, [state.devices]);
 
   const patch = useCallback((partial: Partial<SessionState>) => {
     setState((s) => ({ ...s, ...partial }));
@@ -330,12 +374,92 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const refreshDevices = useCallback(async () => {
     try {
-      const { devices } = await backendClient.listDevices();
+      let { devices } = await backendClient.listDevices();
+      // A renderer reload loses USB streams; do not display those stale slots as ready.
+      const stale = devices.filter(
+        (d) => d.source === 'usb' && !usbCameras.current.has(d.device_id),
+      );
+      if (stale.length) {
+        await Promise.all(
+          stale.map((d) => backendClient.removeDevice(d.device_id)),
+        );
+        devices = (await backendClient.listDevices()).devices;
+      }
       setDevicesFromBackend(devices);
     } catch {
       /* backend may still be starting */
     }
   }, [setDevicesFromBackend]);
+
+  const connectUsbCamera = useCallback(
+    async (cameraId: string, label: string) => {
+      if (usbConnecting.current)
+        throw new Error(t('A USB camera is already connecting.'));
+      if (
+        [...usbCameras.current.values()].some(
+          (camera) => camera.hardwareId === cameraId,
+        )
+      )
+        throw new Error(t('This camera is already connected'));
+      usbConnecting.current = true;
+      let stream: MediaStream | null = null;
+      let camera: UsbCamera | null = null;
+      let registeredId: string | null = null;
+      try {
+        recorderMime();
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            deviceId: { exact: cameraId },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
+          },
+        });
+        const registered = await backendClient.connectUsbCamera(
+          cameraId,
+          label,
+        );
+        registeredId = registered.device_id;
+        camera = new UsbCamera(
+          cameraId,
+          registered.device_id,
+          registered.device_pairing_token,
+          stream,
+          (message) => {
+            setState((s) => {
+              const errors = { ...s.usbCameraErrors };
+              if (message) errors[registered.device_id] = message;
+              else delete errors[registered.device_id];
+              return { ...s, usbCameraErrors: errors };
+            });
+            if (message) showToast(t(message), 6500);
+          },
+        );
+        usbCameras.current.set(registered.device_id, camera);
+        await camera.start();
+        const { devices } = await backendClient.listDevices();
+        setDevicesFromBackend(devices);
+        setState((s) => ({
+          ...s,
+          usbHardwareIds: [...usbCameras.current.values()].map(
+            (c) => c.hardwareId,
+          ),
+        }));
+      } catch (error) {
+        camera?.dispose();
+        stream?.getTracks().forEach((track) => track.stop());
+        if (registeredId) {
+          usbCameras.current.delete(registeredId);
+          await backendClient.removeDevice(registeredId).catch(() => {});
+        }
+        throw error;
+      } finally {
+        usbConnecting.current = false;
+      }
+    },
+    [setDevicesFromBackend, showToast],
+  );
 
   const startPairing = useCallback(
     async (publicBaseUrl?: string, replaceDeviceId?: string) => {
@@ -440,15 +564,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const resetSession = useCallback(async () => {
     sessionEpoch.current += 1;
     const snapshot = stateRef.current;
+    usbCameras.current.forEach((camera) => camera.resetAssessment());
     for (const result of Object.values(snapshot.poseByTrial)) {
       disposeTrialPoseResult(result);
     }
     const trialIds = new Set(snapshot.trialRecords.map((trial) => trial.id));
     if (snapshot.activeTrialId) trialIds.add(snapshot.activeTrialId);
     await Promise.all([
-      ...snapshot.devices.map((device) =>
-        backendClient.removeDevice(device.deviceId).catch(() => {}),
-      ),
       ...[...trialIds].map((id) =>
         backendClient.deleteRecordings(id).catch(() => {}),
       ),
@@ -458,43 +580,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     ]);
     setState((s) => ({
       ...initial,
+      devices: s.devices,
+      camCount: s.camCount,
+      usbCameraErrors: s.usbCameraErrors,
+      usbHardwareIds: s.usbHardwareIds,
+      connectedImus: s.connectedImus,
+      hasImus: s.hasImus,
       backend: s.backend,
       backendReady: s.backendReady,
     }));
-  }, []);
-
-  const startNewSubject = useCallback(() => {
-    setState((s) => {
-      for (const result of Object.values(s.poseByTrial)) {
-        disposeTrialPoseResult(result);
-      }
-      const postureSavedById = { ...s.postureSavedById };
-      const subjectFolderById = { ...s.subjectFolderById };
-      delete postureSavedById[s.subjectId];
-      delete subjectFolderById[s.subjectId];
-      return {
-        ...s,
-        screen: 4,
-        subjectId: '',
-        subjectName: '',
-        heightCm: '',
-        weightKg: '',
-        postureDone: false,
-        capturedStanding: [],
-        standingFiles: {},
-        postureSavedById,
-        subjectFolderById,
-        trialName: 'gait01',
-        trials: [],
-        trialRecords: [],
-        activeTrialId: null,
-        activeStartAtMs: null,
-        recording: false,
-        elapsed: 0,
-        poseByTrial: {},
-        savedFolderByTrial: {},
-      };
-    });
   }, []);
 
   const loadExistingDemoSubject = useCallback(() => {
@@ -594,43 +688,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => ({
       ...state,
       go: (screen) => patch({ screen }),
+      openCameraPairing: () =>
+        setState((s) =>
+          s.screen === 2
+            ? s
+            : { ...s, pairingReturnScreen: s.screen, screen: 2 },
+        ),
+      closeCameraPairing: () =>
+        setState((s) => ({ ...s, screen: s.pairingReturnScreen })),
       setFlow: (flow) => patch({ flow }),
-      replaceTrials: (trial) =>
-        setState((s) => ({
-          ...s,
-          trials: [trial.name],
-          trialRecords: [trial],
-          trialName: trial.name,
-          activeTrialId: trial.id,
-        })),
-      clearUploadCapture: () => {
-        for (const result of Object.values(state.poseByTrial)) {
-          disposeTrialPoseResult(result);
-        }
-        // Drop the planted import device so a later Record session does not
-        // inherit it. The next import uses fresh=1 and clears again.
-        for (const device of state.devices) {
-          void backendClient.removeDevice(device.deviceId).catch(() => {});
-        }
-        if (state.activeTrialId) {
-          void backendClient
-            .deleteRecordings(state.activeTrialId)
-            .catch(() => {});
-        }
-        setState((s) => ({
-          ...s,
-          devices: [],
-          camCount: 0,
-          trials: [],
-          trialRecords: [],
-          trialName: 'gait01',
-          activeTrialId: null,
-          poseByTrial: {},
-          savedFolderByTrial: {},
-        }));
-      },
       setSessionName: (sessionName) => patch({ sessionName }),
       setSessionNotes: (sessionNotes) => patch({ sessionNotes }),
+      setQuestionnaire: (questionnaire) =>
+        patch({ questionnaire, questionnaireCompleted: false }),
+      setQuestionnaireCompleted: (questionnaireCompleted) =>
+        patch({ questionnaireCompleted }),
       setCamCount: (camCount) => patch({ camCount }),
       setQrActive: (qrActive) => patch({ qrActive }),
       setConnectedImus: (connectedImus) =>
@@ -660,7 +732,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       markStandingCaptured,
       resetStanding,
       loadExistingDemoSubject,
-      startNewSubject,
       resetSession,
       sessionEpoch,
       setTrialName: (trialName) => patch({ trialName }),
@@ -732,6 +803,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       selectedTrial: () => latestTrial(state.trialRecords, state.trialName),
       showToast,
       refreshDevices,
+      connectUsbCamera,
       startPairing,
       cancelPairing,
       mockCompletePairing,
@@ -742,6 +814,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       patch,
       showToast,
       refreshDevices,
+      connectUsbCamera,
       startPairing,
       cancelPairing,
       mockCompletePairing,
@@ -749,7 +822,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       markStandingCaptured,
       resetStanding,
       loadExistingDemoSubject,
-      startNewSubject,
       resetSession,
       sessionEpoch,
     ],

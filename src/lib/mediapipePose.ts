@@ -61,7 +61,7 @@ function loadLandmarker(
       }
     } catch (err) {
       console.warn(
-        `[MotusCap Lite] MediaPipe Pose (${modelFile}) unavailable`,
+        `[KneeVidScan-Desktop] MediaPipe Pose (${modelFile}) unavailable`,
         err,
       );
       pending.delete(modelFile);
@@ -168,7 +168,7 @@ export async function createVideoLandmarker(
     };
   } catch (err) {
     console.warn(
-      `[MotusCap Lite] MediaPipe Pose video (${opts.model}) unavailable`,
+      `[KneeVidScan-Desktop] MediaPipe Pose video (${opts.model}) unavailable`,
       err,
     );
     return null;

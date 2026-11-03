@@ -1,6 +1,6 @@
+import { CameraPairingButton } from '../components/CameraPairingButton';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LeaveButton, LeaveGroup } from '../components/LeaveButton';
-import { NewSubjectButton } from '../components/NewSubjectButton';
 import { backendClient } from '../lib/backendClient';
 import {
   applyViewTransforms,
@@ -18,14 +18,9 @@ import { frameIndexAtTime } from '../lib/posePlayback';
 import { drawLandmarks } from '../lib/livePose';
 import { containFit, containRect } from '../lib/standingGate';
 import { useBoxSize } from '../lib/useBoxSize';
-import {
-  exportPoseToFolder,
-  formatSaveResultNote,
-  formatSaveResultToast,
-  saveSessionToFolder,
-} from '../lib/sessionSave';
 import { camLabel, t } from '../lib/locale';
 import { useLocale } from '../lib/useLocale';
+import { saveSessionToFolder, formatSaveResultToast } from '../lib/sessionSave';
 import { latestTrial, useSession } from '../state/SessionContext';
 
 function fmtTime(sec: number) {
@@ -74,15 +69,11 @@ export function Pose() {
     setSavedFolder,
     subjectFolderById,
     setSubjectFolder,
+    sessionEpoch,
     setTrialName,
     setTrialPose,
-    clearUploadCapture,
-    flow,
-    setFlow,
     go,
     showToast,
-    resetSession,
-    sessionEpoch,
   } = useSession();
   useLocale();
 
@@ -94,8 +85,6 @@ export function Pose() {
   const [landmarkSmoothing, setLandmarkSmoothing] = useState(true);
   const [temporalFilter, setTemporalFilter] = useState(true);
   const [show2d, setShow2d] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [savedNote, setSavedNote] = useState(() => t('Not saved yet'));
   const [smooth1, setSmooth1] = useState(0.5);
   const [smooth2, setSmooth2] = useState(0.5);
   const [det, setDet] = useState(0.5);
@@ -104,6 +93,8 @@ export function Pose() {
   const [running, setRunning] = useState(false);
   const [runProgress, setRunProgress] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState('');
+  const saveBusy = useRef(false);
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const playOrigin = useRef(0);
@@ -453,13 +444,6 @@ export function Pose() {
     window.addEventListener('pointerup', up);
   };
 
-  const abandonPoseRun = () => {
-    poseRun.current += 1;
-    setRunning(false);
-    setPlaying(false);
-    setRunProgress('');
-  };
-
   const onRerun = async () => {
     if (running) return;
     const run = poseRun.current;
@@ -573,81 +557,63 @@ export function Pose() {
     }
   };
 
-  const ppSave = async () => {
-    if (saving) return;
-    const epoch = sessionEpoch.current;
+  const proceedToReport = async () => {
+    if (running || saveBusy.current) return;
+    saveBusy.current = true;
     setSaving(true);
-    const result = await saveSessionToFolder({
-      subjectId,
-      subjectName,
-      trialName,
-      trialId: selectedTrial?.id ?? null,
-      camCount: effectiveCamCount,
-      devices: devices.map((d) => ({
-        deviceId: d.deviceId,
-        camIndex: d.camIndex,
-      })),
-      subjectFolder: subjectFolderById[subjectId] ?? null,
-      includeImuCsv: false,
-      onProgress: setSavedNote,
-    }).finally(() => {
-      if (epoch === sessionEpoch.current) setSaving(false);
-    });
-    if (epoch !== sessionEpoch.current) return;
-    if (!result.ok) {
-      if (result.cancelled) {
-        showToast(t('Save cancelled'));
-        return;
-      }
-      showToast(t(result.error));
-      return;
-    }
-    setSavedNote(formatSaveResultNote(result));
-    setSubjectFolder(subjectId, result.subjectFolder);
-    setSavedFolder(trialName, result.folder);
-    showToast(
-      formatSaveResultToast(result),
-      result.failedVideos.length ? 8000 : undefined,
-    );
-  };
-
-  const ppExport = async (
-    fmt: 'csv2d' | 'csv3d' | 'trc' | 'json' | 'mp4',
-    all: boolean,
-  ) => {
+    setPlaying(false);
     const epoch = sessionEpoch.current;
-    setMenuOpen(false);
-    if (fmt === 'mp4') {
-      // Original videos only — never burn overlay. Reuse Save path.
-      await ppSave();
-      return;
-    }
-    const result = await exportPoseToFolder({
-      subjectId,
-      subjectName,
-      trialName,
-      camCount: effectiveCamCount,
-      format: fmt,
-      camIndex: all ? 'all' : poseCam - 1,
-      poseResult,
-      subjectFolder: subjectFolderById[subjectId] ?? null,
-    });
-    if (epoch !== sessionEpoch.current) return;
-    if (!result.ok) {
-      if (result.cancelled) {
-        showToast(t('Export cancelled'));
-        return;
+    let folder = subjectFolderById[subjectId];
+    try {
+      // The trial picker uses names; save the latest recording for each name.
+      const recorded = [
+        ...new Map(trialRecords.map((trial) => [trial.name, trial])).values(),
+      ];
+      for (const trial of recorded) {
+        setSaveProgress(t('Saving videos for {name}…', { name: trial.name }));
+        const result = await saveSessionToFolder({
+          subjectId,
+          subjectName,
+          trialName: trial.name,
+          trialId: trial.id,
+          camCount: effectiveCamCount,
+          devices: devices.map(({ deviceId, camIndex }) => ({
+            deviceId,
+            camIndex,
+          })),
+          subjectFolder: folder,
+          clearTempAfterSave: false,
+          onProgress: (message) => {
+            if (epoch === sessionEpoch.current) setSaveProgress(t(message));
+          },
+        });
+        if (epoch !== sessionEpoch.current) return;
+        if (!result.ok) {
+          showToast(t(result.error), 8000);
+          return;
+        }
+        if (result.failedVideos.length) {
+          showToast(formatSaveResultToast(result), 10000);
+          return;
+        }
+        folder = result.subjectFolder;
+        setSubjectFolder(subjectId, folder);
+        setSavedFolder(trial.name, result.folder);
       }
-      showToast(t(result.error));
-      return;
+      if (epoch === sessionEpoch.current) go(8);
+    } catch (error) {
+      if (epoch === sessionEpoch.current)
+        showToast(
+          t(error instanceof Error ? error.message : 'Save failed'),
+          8000,
+        );
+    } finally {
+      saveBusy.current = false;
+      if (epoch === sessionEpoch.current) {
+        setSaving(false);
+        setSaveProgress('');
+      }
     }
-    setSubjectFolder(subjectId, result.subjectFolder);
-    showToast(
-      t('Exported {files} → {folder}', {
-        files: result.written.join(', '),
-        folder: result.folder,
-      }),
-    );
   };
 
   const togglePlay = () => {
@@ -827,7 +793,7 @@ export function Pose() {
               type="button"
               style={{ width: '100%', justifyContent: 'center' }}
               data-testid="pose-rerun"
-              disabled={running}
+              disabled={running || saving}
               onClick={() => void onRerun()}
             >
               {running
@@ -837,12 +803,10 @@ export function Pose() {
                 : t('Run pose estimation')}
             </button>
             <small data-testid="pose-rerun-note">
-              {flow === 'upload'
-                ? t('Applies to {name}.', { name: trialName })
-                : t(
-                    'Applies to every camera view of {name}. Full-res uploads only (not live preview).',
-                    { name: trialName },
-                  )}
+              {t(
+                'Applies to every camera view of {name}. Full-res uploads only (not live preview).',
+                { name: trialName },
+              )}
             </small>
           </div>
         </aside>
@@ -858,54 +822,49 @@ export function Pose() {
                 }}
               >
                 <b style={{ fontSize: 15 }}>{t('Pose estimation')}</b>
-                {flow === 'upload' ? null : (
-                  <label
-                    className="field"
+                <label
+                  className="field"
+                  style={{
+                    margin: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    textTransform: 'none',
+                    letterSpacing: 0,
+                  }}
+                >
+                  {t('Trial')}
+                  <select
+                    value={trialName}
+                    data-testid="pose-trial-picker"
+                    disabled={saving}
+                    onChange={(e) => {
+                      setTrialName(e.target.value);
+                      setPoseCam(1);
+                      showToast(
+                        t('Showing trial {name}', { name: e.target.value }),
+                      );
+                    }}
                     style={{
-                      margin: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontSize: 12,
-                      textTransform: 'none',
-                      letterSpacing: 0,
+                      font: 'inherit',
+                      padding: '4px 8px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
                     }}
                   >
-                    {t('Trial')}
-                    <select
-                      value={trialName}
-                      data-testid="pose-trial-picker"
-                      onChange={(e) => {
-                        setTrialName(e.target.value);
-                        setPoseCam(1);
-                        showToast(
-                          t('Showing trial {name}', { name: e.target.value }),
-                        );
-                      }}
-                      style={{
-                        font: 'inherit',
-                        padding: '4px 8px',
-                        borderRadius: 8,
-                        border: '1px solid var(--border)',
-                      }}
-                    >
-                      {pickerTrials.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
+                    {pickerTrials.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
               <div className="pp-note" style={{ margin: '2px 0 0' }}>
-                {flow === 'upload'
-                  ? t(
-                      'Uploaded video · single view. 2D overlay + 3D landmarks.',
-                    )
-                  : t(
-                      'Each camera is estimated on its own. Views are not combined into one 3D scene.',
-                    )}
+                {t(
+                  'Each camera is estimated on its own. Views are not combined into one 3D scene.',
+                )}
               </div>
               {poseResult ? (
                 <div
@@ -927,40 +886,36 @@ export function Pose() {
                 </div>
               ) : null}
             </div>
-            {flow === 'upload' ? null : (
-              <div
-                className="pose-tabs"
-                style={{ padding: 0, marginLeft: 'auto' }}
-                data-testid="pose-cam-tabs"
-              >
-                {effectiveCamCount > 1 ? (
-                  <span className="pp-note" style={{ marginRight: 4 }}>
-                    {t('Camera view')}
-                  </span>
-                ) : null}
-                {Array.from({ length: effectiveCamCount }, (_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className={`pose-tab${poseCam === i + 1 ? ' on' : ''}`}
-                    data-testid={`pose-cam-tab-${i}`}
-                    onClick={() => setPoseCam(i + 1)}
-                  >
-                    {camLabel(effectiveCamCount, i)}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div
+              className="pose-tabs"
+              style={{ padding: 0, marginLeft: 'auto' }}
+              data-testid="pose-cam-tabs"
+            >
+              {effectiveCamCount > 1 ? (
+                <span className="pp-note" style={{ marginRight: 4 }}>
+                  {t('Camera view')}
+                </span>
+              ) : null}
+              {Array.from({ length: effectiveCamCount }, (_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`pose-tab${poseCam === i + 1 ? ' on' : ''}`}
+                  data-testid={`pose-cam-tab-${i}`}
+                  onClick={() => setPoseCam(i + 1)}
+                >
+                  {camLabel(effectiveCamCount, i)}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="pp-wins">
             <div className="pp-win">
               <div className="pp-win-h">
                 <b>
-                  {flow === 'upload'
-                    ? t('3D pose · Upload')
-                    : t('3D pose · {cam}', {
-                        cam: camLabel(effectiveCamCount, poseCam - 1),
-                      })}
+                  {t('3D pose · {cam}', {
+                    cam: camLabel(effectiveCamCount, poseCam - 1),
+                  })}
                 </b>
                 <span>
                   {t(
@@ -1041,11 +996,9 @@ export function Pose() {
             <div className="pp-win">
               <div className="pp-win-h">
                 <b>
-                  {flow === 'upload'
-                    ? t('Video · 2D pose')
-                    : t('Video · 2D pose · {cam}', {
-                        cam: camLabel(effectiveCamCount, poseCam - 1),
-                      })}
+                  {t('Video · 2D pose · {cam}', {
+                    cam: camLabel(effectiveCamCount, poseCam - 1),
+                  })}
                 </b>
                 <span>
                   {t('Overlay for viewing only · files stay original')}
@@ -1178,9 +1131,7 @@ export function Pose() {
                   total: frameCount,
                 })}
                 {frameCount
-                  ? flow === 'upload'
-                    ? ''
-                    : t(' · views in sync')
+                  ? t(' · views in sync')
                   : t(' · re-run to load frames')}
               </span>
               <span data-testid="pose-time-meta">
@@ -1198,203 +1149,50 @@ export function Pose() {
                   'Leave Pose? The re-run continues and its result is saved to this trial.',
                 )}
                 testId="pose-back-review"
-              />
-              {flow === 'upload' ? null : (
-                <LeaveButton
-                  label={t('Pair cameras')}
-                  target={2}
-                  busy={running}
-                  confirmText={t(
-                    'Leave Pose? The re-run continues and its result is saved to this trial.',
-                  )}
-                  testId="pose-pair-cameras"
-                />
-              )}
-            </LeaveGroup>
-            {flow === 'upload' ? (
-              <button
-                className="btn btn-ghost"
-                type="button"
-                data-testid="pose-home"
-                onClick={() => {
-                  setPlaying(false);
-                  clearUploadCapture();
-                  setFlow('home');
-                  go(0);
-                }}
-              >
-                {t('Home')}
-              </button>
-            ) : null}
-            {flow === 'upload' ? null : (
-              <NewSubjectButton beforeStart={abandonPoseRun} />
-            )}
-            {flow === 'upload' ? (
-              <button
-                className="btn btn-secondary"
-                type="button"
-                data-testid="pose-upload-another"
-                onClick={() => {
-                  setPlaying(false);
-                  clearUploadCapture();
-                  go(9);
-                  showToast(t('Ready for another MP4'));
-                }}
-              >
-                {t('Upload another video')}
-              </button>
-            ) : (
-              <button
-                className="btn btn-secondary"
-                type="button"
-                data-testid="pose-record-another"
-                onClick={() => {
-                  setPlaying(false);
-                  setTrialName(incrementTrialName(trialName));
-                  go(5);
-                }}
-              >
-                {t('Record another video')}
-              </button>
-            )}
-            {flow === 'upload' ? null : (
-              <span
-                style={{
-                  marginLeft: 'auto',
-                  fontSize: 12,
-                  color: 'var(--muted)',
-                }}
-                data-testid="pose-save-note"
-              >
-                {savedNote}
-              </span>
-            )}
-            {flow === 'upload' ? null : (
-              <button
-                className="btn btn-green"
-                type="button"
-                data-testid="pose-save"
                 disabled={saving}
-                onClick={() => void ppSave()}
-              >
-                {saving ? t('Saving…') : t('Save videos')}
-              </button>
-            )}
-            <div
-              className="pp-export"
-              style={flow === 'upload' ? { marginLeft: 'auto' } : undefined}
-            >
-              <button
-                className="btn btn-primary"
-                type="button"
-                data-testid="pose-export"
-                onClick={() => setMenuOpen((o) => !o)}
-              >
-                {t('Export ▾')}
-              </button>
-              <div className={`pp-menu${menuOpen ? ' open' : ''}`}>
-                {flow === 'upload' ? (
-                  <>
-                    <button
-                      type="button"
-                      data-testid="pose-export-csv2d-one"
-                      onClick={() => void ppExport('csv2d', false)}
-                    >
-                      {t('CSV · 2D')}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-csv3d-one"
-                      onClick={() => void ppExport('csv3d', false)}
-                    >
-                      {t('CSV · 3D')}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-trc-one"
-                      onClick={() => void ppExport('trc', false)}
-                    >
-                      {t('OpenSim TRC')}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      data-testid="pose-export-csv2d-one"
-                      onClick={() => void ppExport('csv2d', false)}
-                    >
-                      {t('2D CSV · {cam} only', {
-                        cam: camLabel(effectiveCamCount, poseCam - 1),
-                      })}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-csv2d-all"
-                      onClick={() => void ppExport('csv2d', true)}
-                    >
-                      {t('2D CSV · all views')}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-csv3d-one"
-                      onClick={() => void ppExport('csv3d', false)}
-                    >
-                      {t('3D CSV · {cam} only', {
-                        cam: camLabel(effectiveCamCount, poseCam - 1),
-                      })}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-csv3d-all"
-                      onClick={() => void ppExport('csv3d', true)}
-                    >
-                      {t('3D CSV · all views')}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-trc-one"
-                      onClick={() => void ppExport('trc', false)}
-                    >
-                      {t('OpenSim TRC · {cam} only', {
-                        cam: camLabel(effectiveCamCount, poseCam - 1),
-                      })}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-trc-all"
-                      onClick={() => void ppExport('trc', true)}
-                    >
-                      {t('OpenSim TRC · all views')}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-json"
-                      onClick={() => void ppExport('json', true)}
-                    >
-                      {t('JSON · all views (raw 33 landmarks)')}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="pose-export-mp4"
-                      onClick={() => void ppExport('mp4', true)}
-                    >
-                      {t('Original videos · all views (no overlay)')}
-                    </button>
-                  </>
+              />
+              <CameraPairingButton
+                busy={running}
+                confirmText={t(
+                  'Leave Pose? The re-run continues and its result is saved to this trial.',
                 )}
-              </div>
-            </div>
+                testId="pose-pair-cameras"
+                disabled={saving}
+                beforeLeave={() => setPlaying(false)}
+              />
+            </LeaveGroup>
+
+            <button
+              className="btn btn-secondary"
+              type="button"
+              data-testid="pose-record-another"
+              disabled={saving}
+              onClick={() => {
+                setPlaying(false);
+                setTrialName(incrementTrialName(trialName));
+                go(5);
+              }}
+            >
+              {t('Record another video')}
+            </button>
+            {saving ? (
+              <span
+                className="pp-note"
+                role="status"
+                data-testid="pose-video-save-progress"
+              >
+                {saveProgress}
+              </span>
+            ) : null}
             <button
               className="btn btn-primary"
               type="button"
-              data-testid="pose-complete-analysis"
-              onClick={() => {
-                abandonPoseRun();
-                void resetSession();
-              }}
+              data-testid="pose-proceed-report"
+              style={{ marginLeft: 'auto' }}
+              disabled={running || saving}
+              onClick={() => void proceedToReport()}
             >
-              {t('Complete analysis')}
+              {saving ? t('Saving…') : t('Proceed')}
             </button>
           </div>
         </div>

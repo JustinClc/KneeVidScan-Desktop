@@ -71,7 +71,7 @@ describe('save / export naming plans', () => {
         subjectId: 'UG0002',
         subjectName: '陳 大文',
       })[4].filename,
-    ).toBe('UG0002_陳-大文_standing_RL.png');
+    ).toBe('UG0002_陳-大文_standing_RL_annotated.png');
   });
 
   it('plans six posture photos with no trial in the name', () => {
@@ -81,11 +81,11 @@ describe('save / export naming plans', () => {
         subjectName: 'Chan Tai Man',
       }).map((p) => p.filename),
     ).toEqual([
-      'UG0001_Chan-Tai-Man_standing_F.png',
+      'UG0001_Chan-Tai-Man_standing_F_annotated.png',
       'UG0001_Chan-Tai-Man_standing_F_full.png',
-      'UG0001_Chan-Tai-Man_standing_LL.png',
+      'UG0001_Chan-Tai-Man_standing_LL_annotated.png',
       'UG0001_Chan-Tai-Man_standing_LL_full.png',
-      'UG0001_Chan-Tai-Man_standing_RL.png',
+      'UG0001_Chan-Tai-Man_standing_RL_annotated.png',
       'UG0001_Chan-Tai-Man_standing_RL_full.png',
     ]);
   });

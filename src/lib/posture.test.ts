@@ -35,9 +35,9 @@ describe('standing posture sequence', () => {
 
   it('builds standing PNG names for a subject', () => {
     expect(standingNamesForSubject('UG0001', 'Chan Tai Man')).toEqual([
-      'UG0001_Chan-Tai-Man_standing_F.png',
-      'UG0001_Chan-Tai-Man_standing_LL.png',
-      'UG0001_Chan-Tai-Man_standing_RL.png',
+      'UG0001_Chan-Tai-Man_standing_F_annotated.png',
+      'UG0001_Chan-Tai-Man_standing_LL_annotated.png',
+      'UG0001_Chan-Tai-Man_standing_RL_annotated.png',
     ]);
   });
 });
@@ -131,9 +131,9 @@ describe('load existing subject', () => {
     const loaded = loadExistingSubject({
       ...DEMO_SUBJECT,
       standingFiles: {
-        F: 'old_standing_F.png',
-        LL: 'old_standing_LL.png',
-        RL: 'old_standing_RL.png',
+        F: 'old_standing_F_annotated.png',
+        LL: 'old_standing_LL_annotated.png',
+        RL: 'old_standing_RL_annotated.png',
       },
     });
     expect(loaded.profile.subjectId).toBe('UG0001');

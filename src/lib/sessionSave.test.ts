@@ -153,6 +153,32 @@ describe('saveSessionToFolder', () => {
     expect(backend.deleted).toEqual(['tr_1']);
   });
 
+  it('can keep saved trial videos available for review until End Assessment', async () => {
+    backend.trial = () => ({
+      trial_id: 'tr_1',
+      phase: 'done',
+      uploads: { dev_0: { status: 'ready', bytes: 3, filename: 'x.mp4' } },
+    });
+    backend.bytes.set('dev_0', new Uint8Array([1, 2, 3]));
+    const result = await saveSessionToFolder({
+      subjectId: 'S001',
+      subjectName: 'Name',
+      trialName: 'trial01',
+      trialId: 'tr_1',
+      camCount: 1,
+      devices: [threeCams[0]],
+      subjectFolder: '/tmp/subject',
+      clearTempAfterSave: false,
+      writeFiles: writeAll(),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.failedVideos).toEqual([]);
+    expect(result.written).toContain('S001_Name_trial01.mp4');
+    expect(result.clearedTemp).toBe(false);
+    expect(backend.deleted).toEqual([]);
+  });
+
   it('waits for uploading / converting cameras and names the one that failed', async () => {
     let polls = 0;
     backend.trial = () => {
@@ -379,10 +405,10 @@ describe('savePosturePhotos', () => {
     expect(result.folder).toBe('/data/Chan');
     expect(writeFiles).toHaveBeenCalledWith('/data/Chan', expect.any(Array));
     expect(result.written).toEqual([
-      'UG0001_Chan-Tai-Man_standing_F.png',
+      'UG0001_Chan-Tai-Man_standing_F_annotated.png',
       'UG0001_Chan-Tai-Man_standing_F_full.png',
-      'UG0001_Chan-Tai-Man_standing_LL.png',
-      'UG0001_Chan-Tai-Man_standing_RL.png',
+      'UG0001_Chan-Tai-Man_standing_LL_annotated.png',
+      'UG0001_Chan-Tai-Man_standing_RL_annotated.png',
       'UG0001_Chan-Tai-Man_standing_RL_full.png',
       'UG0001_Chan-Tai-Man_subject.csv',
     ]);
@@ -439,7 +465,9 @@ describe('savePosturePhotos', () => {
     expect(again.ok).toBe(false);
     if (again.ok) return;
     expect(again.folder).toBe('/data/Chan');
-    expect(again.error).toContain('UG0001_Chan-Tai-Man_standing_F.png');
+    expect(again.error).toContain(
+      'UG0001_Chan-Tai-Man_standing_F_annotated.png',
+    );
     expect(again.error).not.toContain('iVBORw0KGgo');
   });
 
@@ -483,7 +511,7 @@ describe('rehomeStandingPhotos', () => {
     expect(saveStanding).toHaveBeenCalledWith(
       'UG0002',
       'F',
-      'UG0002_Chan-Siu-Man_standing_F.png',
+      'UG0002_Chan-Siu-Man_standing_F_annotated.png',
       png,
       'crop',
     );

@@ -331,9 +331,9 @@ describe('preview profiles', () => {
         seconds: 3,
       }),
     ).toBe('3 秒後開始');
-    expect(helpers.translateText(messages, 'zh-Hant', 'MotusCap Lite')).toBe(
-      'MotusCap Lite',
-    );
+    expect(
+      helpers.translateText(messages, 'zh-Hant', 'KneeVidScan-Desktop'),
+    ).toBe('KneeVidScan-Desktop');
     expect(helpers.translateText(messages, 'en', 'Pair this phone')).toBe(
       'Pair this phone',
     );

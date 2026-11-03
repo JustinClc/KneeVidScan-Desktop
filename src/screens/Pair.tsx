@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { UsbCameraPicker } from '../components/UsbCameraPicker';
 import { IMU_SLOTS } from '../lib/imu';
 import { backendClient } from '../lib/backendClient';
 import { CAM_MAX, CAM_PHONES, VIEW_ROLES } from '../lib/steps';
@@ -80,6 +81,8 @@ function slotRole(camCount: number, i: number) {
 export function Pair() {
   const {
     camCount,
+    usbCameraErrors,
+    closeCameraPairing,
     devices,
     qrActive,
     activePairing,
@@ -265,7 +268,7 @@ export function Pair() {
             <h1>{t('Pair cameras')}</h1>
             <p className="sub" style={{ margin: 0 }}>
               {t(
-                'Scan a QR with each phone. MotusCap Lite pairs 1 to 3 cameras. IMUs are optional.',
+                'Connect USB cameras or scan a QR with each phone. Use up to 3 cameras in any combination. IMUs are optional.',
               )}
             </p>
           </div>
@@ -300,6 +303,7 @@ export function Pair() {
             </div>
             <div className="pcol-scroll">
               <div className="pcol-fill">
+                {!qrActive && <UsbCameraPicker disabled={maxed || !backend} />}
                 <div className="pcol-body">
                   {qrActive && activePairing ? (
                     <div className="qr-wrap">
@@ -399,22 +403,27 @@ export function Pair() {
                       </div>
                     </div>
                   )}
-                  <ol className="pair-steps">
-                    <li>
-                      {t(
-                        'Open the phone browser and scan the QR (HTTPS required for camera)',
-                      )}
-                    </li>
-                    <li>{t('Tap Complete pairing on the phone')}</li>
-                    <li>
-                      {t('Place the phone on a tripod facing the capture area')}
-                    </li>
-                    <li>
-                      {t(
-                        'Use Pair with next device for Cam 2 / Cam 3, Re-pair to swap in another phone, or Remove device to disconnect one',
-                      )}
-                    </li>
-                  </ol>
+                  <details className="wireless-instructions">
+                    <summary>{t('Wireless phone instructions')}</summary>
+                    <ol className="pair-steps">
+                      <li>
+                        {t(
+                          'Open the phone browser and scan the QR (HTTPS required for camera)',
+                        )}
+                      </li>
+                      <li>{t('Tap Complete pairing on the phone')}</li>
+                      <li>
+                        {t(
+                          'Place the phone on a tripod facing the capture area',
+                        )}
+                      </li>
+                      <li>
+                        {t(
+                          'Use Pair with next device for Cam 2 / Cam 3, Re-pair to swap in another phone, or Remove device to disconnect one',
+                        )}
+                      </li>
+                    </ol>
+                  </details>
                 </div>
                 {!qrActive && (
                   <div className="public-url" data-testid="public-url">
@@ -559,6 +568,14 @@ export function Pair() {
                           ) : null}
                         </div>
                         <div className="slot-info">
+                          {device?.source === 'usb' && (
+                            <span className="badge">USB</span>
+                          )}
+                          {device && usbCameraErrors[device.deviceId] && (
+                            <small role="alert">
+                              {t(usbCameraErrors[device.deviceId])}
+                            </small>
+                          )}
                           <b>{t('Cam {n}', { n: i + 1 })}</b>
                           {slotRole(camCount, i)}
                           <span>
@@ -568,57 +585,59 @@ export function Pair() {
                         </div>
                         {st === 'on' && !qrActive ? (
                           <div className="slot-actions">
-                            <div
-                              className="slot-action-box"
-                              data-testid={`cam-repair-box-${i}`}
-                            >
-                              {confirmRepair === i ? (
-                                <div
-                                  className="slot-confirm"
-                                  data-testid={`cam-repair-confirm-${i}`}
-                                >
-                                  <small>
-                                    {t(
-                                      'Replace Cam {n}{role}? The current phone is disconnected once the new phone pairs.',
-                                      { n: i + 1, role: roleName },
-                                    )}
-                                  </small>
-                                  <div>
-                                    <button
-                                      className="btn btn-primary btn-sm"
-                                      type="button"
-                                      onClick={() => void repair(i)}
-                                      data-testid={`cam-repair-yes-${i}`}
-                                    >
-                                      {t('Show new QR')}
-                                    </button>
-                                    <button
-                                      className="btn btn-ghost btn-sm"
-                                      type="button"
-                                      onClick={() => setConfirmRepair(null)}
-                                    >
-                                      {t('Cancel')}
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <>
-                                  <button
-                                    className="btn btn-secondary btn-sm"
-                                    type="button"
-                                    disabled={!backend}
-                                    onClick={() => {
-                                      setConfirmRemove(null);
-                                      setConfirmRepair(i);
-                                    }}
-                                    data-testid={`cam-repair-${i}`}
+                            {device?.source !== 'usb' && (
+                              <div
+                                className="slot-action-box"
+                                data-testid={`cam-repair-box-${i}`}
+                              >
+                                {confirmRepair === i ? (
+                                  <div
+                                    className="slot-confirm"
+                                    data-testid={`cam-repair-confirm-${i}`}
                                   >
-                                    {t('Re-pair')}
-                                  </button>
-                                  <small>{t('Swap in another phone')}</small>
-                                </>
-                              )}
-                            </div>
+                                    <small>
+                                      {t(
+                                        'Replace Cam {n}{role}? The current phone is disconnected once the new phone pairs.',
+                                        { n: i + 1, role: roleName },
+                                      )}
+                                    </small>
+                                    <div>
+                                      <button
+                                        className="btn btn-primary btn-sm"
+                                        type="button"
+                                        onClick={() => void repair(i)}
+                                        data-testid={`cam-repair-yes-${i}`}
+                                      >
+                                        {t('Show new QR')}
+                                      </button>
+                                      <button
+                                        className="btn btn-ghost btn-sm"
+                                        type="button"
+                                        onClick={() => setConfirmRepair(null)}
+                                      >
+                                        {t('Cancel')}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      className="btn btn-secondary btn-sm"
+                                      type="button"
+                                      disabled={!backend}
+                                      onClick={() => {
+                                        setConfirmRemove(null);
+                                        setConfirmRepair(i);
+                                      }}
+                                      data-testid={`cam-repair-${i}`}
+                                    >
+                                      {t('Re-pair')}
+                                    </button>
+                                    <small>{t('Swap in another phone')}</small>
+                                  </>
+                                )}
+                              </div>
+                            )}
                             <div
                               className="slot-action-box remove"
                               data-testid={`cam-remove-box-${i}`}
@@ -630,7 +649,7 @@ export function Pair() {
                                 >
                                   <small>
                                     {t(
-                                      'Remove Cam {n}{role}? This phone is disconnected and has to pair again to be used.',
+                                      'Remove Cam {n}{role}? This camera must be connected again to be used.',
                                       { n: i + 1, role: roleName },
                                     )}
                                   </small>
@@ -753,7 +772,7 @@ export function Pair() {
                     <b>{t('No IMUs paired')}</b>
                     <span>
                       {t(
-                        'MotusCap Lite runs with cameras only. Add IMUs for extra joint signals during Capture and Review.',
+                        'KneeVidScan-Desktop runs with cameras only. Add IMUs for extra joint signals during Capture and Review.',
                       )}
                     </span>
                   </div>
@@ -802,20 +821,12 @@ export function Pair() {
               {t('Home')}
             </button>
             <button
-              className="btn btn-ghost"
-              type="button"
-              onClick={() => go(1)}
-            >
-              {t('Back')}
-            </button>
-            <button
               className="btn btn-primary"
               type="button"
-              disabled={camCount < 1}
-              onClick={() => go(4)}
+              onClick={closeCameraPairing}
               data-testid="pair-continue"
             >
-              {t('Continue')}
+              {t('Done')}
             </button>
           </div>
         </div>

@@ -17,12 +17,12 @@ export const PWA_HTML = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="light" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>MotusCap Lite · Pair phone</title>
+  <title>KneeVidScan-Desktop · Pair phone</title>
   <link rel="stylesheet" href="/pwa/app.css" />
 </head>
 <body>
   <main class="page">
-    <p class="brand">MotusCap Lite</p>
+    <p class="brand" data-i18n="KneeVidScan-Desktop">KneeVidScan-Desktop</p>
     <h1 data-i18n="Pair this phone">Pair this phone</h1>
     <p id="status" class="status" data-i18n="Loading pairing details…">Loading pairing details…</p>
     <p class="label" data-i18n="Pairing code">Pairing code</p>
@@ -316,7 +316,7 @@ ${PWA_HELPERS_JS}
         node.textContent = t(node.getAttribute('data-i18n'));
       }
     }
-    try { document.title = t('MotusCap Lite · Pair phone'); } catch (_) { /* test document */ }
+    try { document.title = t('KneeVidScan-Desktop · Pair phone'); } catch (_) { /* test document */ }
   }
 
   function setStatus(text, cls, vars) {

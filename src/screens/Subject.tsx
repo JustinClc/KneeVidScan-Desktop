@@ -1,6 +1,6 @@
+import { CameraPairingButton } from '../components/CameraPairingButton';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LeaveButton } from '../components/LeaveButton';
-import { NewSubjectButton } from '../components/NewSubjectButton';
 import {
   standingFileName,
   standingFullFileName,
@@ -34,6 +34,7 @@ import {
   createFpsMeter,
   detectGapMs,
 } from '../lib/framePacing';
+import { standingReviewUrl } from '../lib/standingReview';
 import { cropStillToGuide } from '../lib/standingCapture';
 import {
   loadStandingLandmarker,
@@ -42,11 +43,7 @@ import {
 import { drawLandmarks } from '../lib/livePose';
 import { DEMO_SUBJECT } from '../lib/subjects';
 import { backendClient } from '../lib/backendClient';
-import {
-  formatPostureSaveToast,
-  rehomeStandingPhotos,
-  savePosturePhotos,
-} from '../lib/sessionSave';
+import { formatPostureSaveToast, savePosturePhotos } from '../lib/sessionSave';
 import { planPosturePhotos } from '../lib/saveExport';
 import { useBoxSize } from '../lib/useBoxSize';
 import { useSession } from '../state/SessionContext';
@@ -83,7 +80,6 @@ type DetectorState = 'loading' | 'ready' | 'unavailable';
 
 type ReviewShot = {
   code: StandingCode;
-  croppedPng: Uint8Array;
   fullPng: Uint8Array;
   url: string;
   width: number;
@@ -103,7 +99,9 @@ const sleep = (ms: number) =>
 
 export function Subject() {
   const {
+    screen: currentScreen,
     devices,
+    usbCameraErrors,
     subjectId,
     subjectName,
     heightCm,
@@ -111,12 +109,10 @@ export function Subject() {
     postureDone,
     capturedStanding,
     postureSavedById,
+    subjectFolderById,
     setSubjectFolder,
     markPostureSaved,
     setSubjectId,
-    setSubjectName,
-    setHeightCm,
-    setWeightKg,
     markStandingCaptured,
     resetStanding,
     go,
@@ -131,7 +127,12 @@ export function Subject() {
   );
   const frontalId = frontal?.deviceId;
 
-  const [pstStep, setPstStep] = useState(0);
+  const [pstStep, setPstStep] = useState(() => {
+    const missing = POSTURE_STEPS.findIndex(
+      (step) => !capturedStanding.includes(step.code),
+    );
+    return missing < 0 ? POSTURE_STEPS.length : missing;
+  });
   const [retakingCode, setRetakingCode] = useState<StandingCode | null>(null);
   const [phase, setPhaseState] = useState<Phase>('live');
   const [count, setCount] = useState(COUNTDOWN_SECONDS);
@@ -142,11 +143,9 @@ export function Subject() {
   const [review, setReview] = useState<ReviewShot | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [folderChoice, setFolderChoice] = useState(false);
-  const folderPick = useRef(false);
 
   const phaseRef = useRef<Phase>('live');
-  const stepRef = useRef(0);
+  const stepRef = useRef(pstStep);
   const landmarkerRef = useRef<StandingLandmarker | null>(null);
   const holdRef = useRef(createHoldTimer());
   const fpsMeter = useRef(createFpsMeter());
@@ -196,7 +195,7 @@ export function Subject() {
     ...planPosturePhotos({ subjectId, subjectName }).map((p) => p.filename),
     subjectInfoFileName(subjectId, subjectName),
   ];
-  const showLive = !done && phase !== 'review';
+  const showLive = currentScreen === 4 && !done && phase !== 'review';
 
   const clearCountdown = () => {
     if (countdownRef.current != null) {
@@ -276,8 +275,8 @@ export function Subject() {
       const cropped = await cropStillToGuide(still.bytes, still.type);
       let warning: string | null = null;
       const lm = landmarkerRef.current;
+      let points: LandmarkPoint[] | null = null;
       if (lm) {
-        let points: LandmarkPoint[] | null = null;
         try {
           points = lm.detect(cropped.canvas);
         } catch {
@@ -290,11 +289,8 @@ export function Subject() {
       if (!isCurrent()) return;
       setReview({
         code: step.code,
-        croppedPng: cropped.croppedPng,
         fullPng: cropped.fullPng,
-        url: URL.createObjectURL(
-          new Blob([cropped.croppedPng.slice()], { type: 'image/png' }),
-        ),
+        url: standingReviewUrl(cropped.canvas, points, step.side),
         width: cropped.canvas.width,
         height: cropped.canvas.height,
         warning,
@@ -310,7 +306,12 @@ export function Subject() {
   }, [frontalId, setPhase]);
 
   const startCountdown = useCallback(() => {
-    if (!positiveBodyMeasure(heightCm) || !positiveBodyMeasure(weightKg)) {
+    if (
+      !frontalId ||
+      usbCameraErrors[frontalId] ||
+      !positiveBodyMeasure(heightCm) ||
+      !positiveBodyMeasure(weightKg)
+    ) {
       return;
     }
     if (countdownRef.current != null) return;
@@ -326,7 +327,15 @@ export function Subject() {
         void capture();
       }
     }, 1000);
-  }, [capture, setPhase, heightCm, weightKg]);
+  }, [capture, setPhase, heightCm, weightKg, frontalId, usbCameraErrors]);
+
+  // Camera settings preserve this page's state, but must suspend automatic capture.
+  useEffect(() => {
+    if (currentScreen !== 4) {
+      backToLive();
+      discardReview();
+    }
+  }, [currentScreen, backToLive, discardReview]);
 
   // Load the offline MediaPipe Pose model once.
   useEffect(() => {
@@ -343,7 +352,7 @@ export function Subject() {
 
   // Keep the phone on max-res stream + boosted preview while on Standing.
   useEffect(() => {
-    if (!frontalId || done) return;
+    if (currentScreen !== 4 || !frontalId || done) return;
     const beat = () =>
       void backendClient.setStandingMode(frontalId, true).catch(() => {});
     beat();
@@ -352,7 +361,7 @@ export function Subject() {
       window.clearInterval(timer);
       void backendClient.setStandingMode(frontalId, false).catch(() => {});
     };
-  }, [frontalId, done]);
+  }, [frontalId, done, currentScreen]);
 
   // Live preview from the frontal cam: long-poll each new phone frame.
   useEffect(() => {
@@ -397,6 +406,7 @@ export function Subject() {
 
   // Gate: run MediaPipe on each new preview frame.
   const onFrame = (img: HTMLImageElement) => {
+    if (currentScreen !== 4) return;
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) return;
@@ -477,7 +487,10 @@ export function Subject() {
       });
       await backendClient.saveStandingCapture(subjectId, code, {
         filename,
-        croppedPng: review.croppedPng,
+        // Persist exactly the privacy-treated preview accepted by the operator.
+        croppedPng: Uint8Array.from(atob(review.url.split(',')[1]), (c) =>
+          c.charCodeAt(0),
+        ),
         fullFilename: fullName,
         fullPng: review.fullPng,
       });
@@ -547,106 +560,56 @@ export function Subject() {
 
   const saveSubjectAndContinue = async () => {
     if (saving || !canContinue || !subjectId.trim() || !bodyReady) return;
-    if (!postureSavedById[subjectId]) {
-      setFolderChoice(true);
+    const folder = subjectFolderById[subjectId];
+    if (!folder) {
+      showToast(
+        t('Complete the questionnaire to create a subject folder first.'),
+      );
       return;
     }
-    showToast(t(FACE_FRONTAL_AGAIN));
-    go(5);
-  };
-
-  const confirmSubjectFolder = async (destination: 'existing' | 'new') => {
-    if (folderPick.current || saving || !subjectId.trim()) return;
-    folderPick.current = true;
-    // Keep the choice window up until the folder dialog returns. Closing it
-    // while a macOS sheet is open makes that sheet report a cancel.
-    let result: Awaited<ReturnType<typeof savePosturePhotos>>;
+    if (postureSavedById[subjectId]) {
+      showToast(t(FACE_FRONTAL_AGAIN));
+      go(5);
+      return;
+    }
+    setSaving(true);
     try {
       const saveInMain = window.motuscapLite?.saveSubjectFolder;
-      const listed = await backendClient.listSubjects().catch(() => null);
-      const ready = (listed?.subjects ?? []).filter((s) =>
-        (['F', 'LL', 'RL'] as const).every(
-          (code) => (s.standing?.[code]?.bytes ?? 0) > 0,
-        ),
-      );
-      const formId = subjectId.trim();
-      const source =
-        ready.find((s) => s.subjectId === formId) ??
-        (ready.length === 1 ? ready[0] : undefined);
-      if (source && source.subjectId !== formId) {
-        await rehomeStandingPhotos({
-          fromId: source.subjectId,
-          toId: formId,
-          subjectName,
-          fetchStanding: (id, code, variant) =>
-            backendClient.getStandingPng(id, code, variant),
-          saveStanding: (id, code, filename, bytes, variant) =>
-            backendClient.saveStandingPng(id, code, filename, bytes, variant),
-        });
+      const result = saveInMain
+        ? await saveInMain({
+            subjectId,
+            subjectName,
+            heightCm,
+            weightKg,
+            destination: 'existing',
+            folder,
+          })
+        : await savePosturePhotos({
+            subjectId,
+            subjectName,
+            heightCm,
+            weightKg,
+            subjectFolder: folder,
+          });
+      if (!result.ok) {
+        showToast(t(result.error), 8000);
+        return;
       }
-      if (saveInMain) {
-        // The desktop app writes the photos from the store in the main
-        // process. The choice window stays up until that call returns.
-        result = await saveInMain({
-          subjectId,
-          subjectName,
-          heightCm,
-          weightKg,
-          destination,
-          dialogTitle: t(
-            destination === 'new'
-              ? 'Choose the parent folder'
-              : 'Select the subject folder',
-          ),
-          buttonLabel: t('Choose'),
-        });
-        setFolderChoice(false);
-      } else {
-        result = await savePosturePhotos({
-          subjectId,
-          subjectName,
-          heightCm,
-          weightKg,
-          subjectFolder: null,
-          destination,
-          chooseFolder: async (title) => {
-            const picked = await window.motuscapLite?.chooseSaveFolder?.(
-              title ? t(title) : undefined,
-              t('Choose'),
-            );
-            setFolderChoice(false);
-            if (picked) setSaving(true);
-            return picked ?? null;
-          },
-        });
-      }
-    } catch (err) {
-      setFolderChoice(false);
+      setSubjectFolder(subjectId, result.folder);
+      markPostureSaved(subjectId);
+      showToast(formatPostureSaveToast(result));
+      showToast(t(FACE_FRONTAL_AGAIN));
+      go(5);
+    } catch (error) {
       showToast(
         t('Could not save the subject folder: {detail}', {
-          detail: err instanceof Error ? err.message : String(err),
+          detail: error instanceof Error ? error.message : String(error),
         }),
         8000,
       );
-      return;
     } finally {
-      folderPick.current = false;
       setSaving(false);
     }
-    if (!result.ok) {
-      showToast(
-        result.cancelled
-          ? t('Folder selection cancelled. The posture photos are still here.')
-          : t(result.error),
-        8000,
-      );
-      return;
-    }
-    setSubjectFolder(subjectId, result.folder);
-    markPostureSaved(subjectId);
-    showToast(formatPostureSaveToast(result));
-    showToast(t(FACE_FRONTAL_AGAIN));
-    go(5);
   };
 
   const demoComplete = async () => {
@@ -665,8 +628,9 @@ export function Subject() {
       });
       for (const code of ['F', 'LL', 'RL'] as const) {
         const filename =
-          res.files.find((f) => f.endsWith(`_standing_${code}.png`)) ||
-          standingFileName(id, subjectName, code);
+          res.files.find((f) =>
+            f.endsWith(`_standing_${code}_annotated.png`),
+          ) || standingFileName(id, subjectName, code);
         markStandingCaptured(code, filename);
       }
     } catch {
@@ -701,13 +665,6 @@ export function Subject() {
     return t('Step into the frame');
   })();
 
-  const discardInProgressStanding = () => {
-    discardReview();
-    backToLive();
-    setPstStep(0);
-    setRetakingCode(null);
-  };
-
   const sourceText =
     detector === 'ready'
       ? t('MediaPipe Pose (Full) · standing gate')
@@ -727,100 +684,15 @@ export function Subject() {
     >
       <div className="content fill-page">
         <div>
-          <h1>{t('Subject & standing posture')}</h1>
+          <h1>{t('Standing Posture Capture')}</h1>
           <p className="sub" style={{ margin: 0 }}>
             {t(
-              "Enter the subject's details, then capture three natural standing postures with the frontal camera. Each photo is taken automatically once the pose is in the frame, then reviewed.",
+              'Capture three natural standing postures with the frontal camera. Each photo is taken automatically once the pose is in the frame, then reviewed.',
             )}
           </p>
         </div>
         <div className="fill-cols" style={{ gridTemplateColumns: '1fr 1.7fr' }}>
           <div className="card fcol form-gap">
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <div className="block-title" style={{ margin: 0 }}>
-                {t('Subject info')}
-              </div>
-              <NewSubjectButton beforeStart={discardInProgressStanding} />
-            </div>
-            <div>
-              <label className="field">{t('Display name')}</label>
-              <input
-                type="text"
-                data-testid="subject-name"
-                value={subjectName}
-                onChange={(e) => setSubjectName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="field">
-                {t('Subject ID')} <span style={{ color: '#DC2626' }}>*</span>
-              </label>
-              <input
-                type="text"
-                data-testid="subject-id"
-                value={subjectId}
-                required
-                onChange={(e) => setSubjectId(e.target.value)}
-                style={{
-                  borderColor: subjectId.trim() ? undefined : '#DC2626',
-                }}
-              />
-              <small
-                style={{
-                  fontSize: 11,
-                  color: subjectId.trim() ? 'var(--muted)' : '#DC2626',
-                }}
-              >
-                {subjectId.trim()
-                  ? t(
-                      'Required. Used in every saved file name. Spaces in the display name become hyphens.',
-                    )
-                  : t('Enter a subject ID to continue.')}
-              </small>
-            </div>
-            <div className="row">
-              <div>
-                <label className="field">
-                  {t('Height (cm)')} <span style={{ color: '#DC2626' }}>*</span>
-                </label>
-                <input
-                  type="number"
-                  data-testid="subject-height"
-                  value={heightCm}
-                  required
-                  onChange={(e) => setHeightCm(e.target.value)}
-                  style={{
-                    borderColor: positiveBodyMeasure(heightCm)
-                      ? undefined
-                      : '#DC2626',
-                  }}
-                />
-              </div>
-              <div>
-                <label className="field">
-                  {t('Weight (kg)')} <span style={{ color: '#DC2626' }}>*</span>
-                </label>
-                <input
-                  type="number"
-                  data-testid="subject-weight"
-                  value={weightKg}
-                  required
-                  onChange={(e) => setWeightKg(e.target.value)}
-                  style={{
-                    borderColor: positiveBodyMeasure(weightKg)
-                      ? undefined
-                      : '#DC2626',
-                  }}
-                />
-              </div>
-            </div>
             <div className="block-title" style={{ margin: '6px 0 0' }}>
               {t('Standing posture')}
             </div>
@@ -869,7 +741,6 @@ export function Subject() {
                         disabled={
                           !frontalId ||
                           saving ||
-                          folderChoice ||
                           retakingCode != null ||
                           phase === 'count' ||
                           phase === 'capturing' ||
@@ -889,10 +760,24 @@ export function Subject() {
                 'Taken by the frontal camera only, every session, including for returning subjects. Saved as PNG cropped to the guide frame, plus the uncropped original, without the guide frame or pose overlay.',
               )}
             </p>
-            <div className="actions" style={{ marginTop: 'auto' }}>
+            <div
+              className="actions"
+              style={{ marginTop: 'auto', flexWrap: 'wrap' }}
+            >
               <LeaveButton
-                label={t('Back to pairing')}
-                target={2}
+                label={t('Back to questionnaire')}
+                target={1}
+                busy={
+                  phase === 'count' ||
+                  phase === 'capturing' ||
+                  phase === 'review'
+                }
+                confirmText={t(
+                  'Leave Subject? The photo in progress is discarded; accepted photos are kept.',
+                )}
+                testId="subject-back-questionnaire"
+              />
+              <CameraPairingButton
                 busy={
                   phase === 'count' ||
                   phase === 'capturing' ||
@@ -902,6 +787,7 @@ export function Subject() {
                   'Leave Subject? The photo in progress is discarded; accepted photos are kept.',
                 )}
                 testId="subject-back-pairing"
+                disabled={saving}
               />
               <button
                 className="btn btn-green"
@@ -912,7 +798,7 @@ export function Subject() {
                 }
                 onClick={() => void saveSubjectAndContinue()}
               >
-                {saving ? t('Saving…') : t('Save Subject & continue')}
+                {saving ? t('Saving…') : t('Save & Continue')}
               </button>
               {import.meta.env.MODE === 'test' ? (
                 <button
@@ -1151,7 +1037,9 @@ export function Subject() {
                     type="button"
                     data-testid="standing-capture-now"
                     style={{ marginLeft: 'auto' }}
-                    disabled={!bodyReady}
+                    disabled={
+                      !bodyReady || !!(frontalId && usbCameraErrors[frontalId])
+                    }
                     onClick={startCountdown}
                   >
                     {t('Capture now')}
@@ -1175,50 +1063,6 @@ export function Subject() {
           </div>
         </div>
       </div>
-      {folderChoice ? (
-        <div
-          className="folder-choice"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="subject-folder-choice-title"
-          data-testid="subject-folder-choice"
-        >
-          <div className="folder-choice-card">
-            <b id="subject-folder-choice-title">{t('Save subject folder')}</b>
-            <p>
-              {t(
-                'Select an existing subject folder, or create a new one under a parent directory.',
-              )}
-            </p>
-            <div className="actions">
-              <button
-                className="btn btn-primary"
-                type="button"
-                data-testid="subject-folder-new"
-                onClick={() => void confirmSubjectFolder('new')}
-              >
-                {t('Create a new subject folder')}
-              </button>
-              <button
-                className="btn btn-secondary"
-                type="button"
-                data-testid="subject-folder-existing"
-                onClick={() => void confirmSubjectFolder('existing')}
-              >
-                {t('Select an existing subject folder')}
-              </button>
-              <button
-                className="btn btn-secondary"
-                type="button"
-                data-testid="subject-folder-cancel"
-                onClick={() => setFolderChoice(false)}
-              >
-                {t('Cancel')}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }

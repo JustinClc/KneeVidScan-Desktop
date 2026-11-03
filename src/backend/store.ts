@@ -104,7 +104,7 @@ export type SubjectRecord = {
   heightCm: string;
   weightKg: string;
   updatedAt: number;
-  /** Standing PNGs keyed by F / LL / RL — cropped to the guide frame, no overlay. */
+  /** Annotated report PNGs keyed by F / LL / RL — face blurred, with joint overlays. */
   standing: Partial<Record<'F' | 'LL' | 'RL', StandingPng>>;
   /** Uncropped originals for the same postures (`…_standing_X_full.png`). */
   standingFull: Partial<Record<'F' | 'LL' | 'RL', StandingPng>>;
@@ -387,6 +387,28 @@ export class LiteStore {
     };
   }
 
+  /** USB cameras use the same slots, tokens, stills and trial uploads as phones. */
+  connectUsbCamera(cameraId: string, name: string) {
+    if (!cameraId.trim() || !name.trim())
+      return { ok: false as const, error: 'Camera ID and name required' };
+    if (this.devices.some((d) => d.localCameraId === cameraId))
+      return { ok: false as const, error: 'This camera is already connected' };
+    const pending = this.createPairing();
+    if (!pending.ok) return pending;
+    const result = this.completePairing(pending.pairing.id, {
+      code: pending.code,
+      deviceName: name,
+    });
+    if (result.ok) {
+      const device = this.devices.find((d) => d.deviceId === result.deviceId)!;
+      device.source = 'usb';
+      device.localCameraId = cameraId;
+    } else {
+      this.cancelPairing(pending.pairing.id);
+    }
+    return result;
+  }
+
   /** Desktop / CI mock: complete the active pending pairing without a phone. */
   mockCompleteActivePairing(deviceName?: string):
     | {
@@ -514,10 +536,19 @@ export class LiteStore {
     return t;
   }
 
-  startTrial(trialId: string): SharedStartSignal | null {
+  startTrial(
+    trialId: string,
+    options?: { leadMs: number; maxDurationMs: number },
+  ): SharedStartSignal | null {
     const t = this.trials.get(trialId);
     if (!t) return null;
-    const signal = computeSharedStart(t.id, t.name);
+    const signal = computeSharedStart(
+      t.id,
+      t.name,
+      Date.now(),
+      options?.leadMs,
+    );
+    if (options) signal.maxDurationMs = options.maxDurationMs;
     t.startSignal = signal;
     t.phase = 'recording';
     const now = Date.now();

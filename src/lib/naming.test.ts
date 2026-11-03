@@ -70,13 +70,13 @@ describe('naming', () => {
   it('names standing PNGs F → LL → RL with hyphenated subject name', () => {
     expect(STANDING_SEQUENCE).toEqual(['F', 'LL', 'RL']);
     expect(standingFileName('UG0001', 'Chan Tai Man', 'F')).toBe(
-      'UG0001_Chan-Tai-Man_standing_F.png',
+      'UG0001_Chan-Tai-Man_standing_F_annotated.png',
     );
     expect(standingFileName('UG0001', 'Chan Tai Man', 'LL')).toBe(
-      'UG0001_Chan-Tai-Man_standing_LL.png',
+      'UG0001_Chan-Tai-Man_standing_LL_annotated.png',
     );
     expect(standingFileName('UG0001', '陳 大文', 'RL')).toBe(
-      'UG0001_陳-大文_standing_RL.png',
+      'UG0001_陳-大文_standing_RL_annotated.png',
     );
   });
 });

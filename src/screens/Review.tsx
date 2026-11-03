@@ -1,5 +1,5 @@
+import { CameraPairingButton } from '../components/CameraPairingButton';
 import { useEffect, useRef, useState } from 'react';
-import { LeaveButton } from '../components/LeaveButton';
 import { EmptyImuTraces } from '../components/EmptyImu';
 import { ReviewVideoTile } from '../components/ReviewVideo';
 import { backendClient, type TrialUploadInfo } from '../lib/backendClient';
@@ -40,11 +40,8 @@ export function Review() {
     setTrialName,
     recordTrial,
     clearTrialPose,
-    clearUploadCapture,
     showToast,
     go,
-    setFlow,
-    flow,
   } = useSession();
   useLocale();
 
@@ -269,12 +266,9 @@ export function Review() {
       setVideoDurations({});
       setMediaRev((n) => n + 1);
       showToast(
-        t(
-          flow === 'upload'
-            ? 'Trimmed the video to {seconds} s'
-            : 'Trimmed every view to {seconds} s',
-          { seconds: result.duration_sec.toFixed(1) },
-        ),
+        t('Trimmed every view to {seconds} s', {
+          seconds: result.duration_sec.toFixed(1),
+        }),
       );
     } catch (err) {
       setTrimError(t(err instanceof Error ? err.message : 'Trim failed'));
@@ -301,11 +295,7 @@ export function Review() {
       setPct(0);
       setVideoDurations({});
       setMediaRev((n) => n + 1);
-      showToast(
-        flow === 'upload'
-          ? t('Restored the original video')
-          : t('Restored the original videos'),
-      );
+      showToast(t('Restored the original videos'));
     } catch (err) {
       setTrimError(t(err instanceof Error ? err.message : 'Revert failed'));
     } finally {
@@ -355,107 +345,81 @@ export function Review() {
           }}
         >
           <div>
-            <h1 style={{ margin: 0 }}>
-              {flow === 'upload' ? t('Review upload') : t('Synced review')}
-            </h1>
+            <h1 style={{ margin: 0 }}>{t('Sit-to-stand recording review')}</h1>
             <p className="sub" style={{ margin: '4px 0 0' }}>
-              {flow === 'upload'
-                ? t('Uploaded video — trim before pose.')
-                : t(
-                    hasImus
-                      ? 'Shared scrubber across all cameras · IMU traces share the playhead.'
-                      : 'Shared scrubber across all cameras.',
-                  )}
+              {t(
+                hasImus
+                  ? 'Shared scrubber across all cameras · IMU traces share the playhead.'
+                  : 'Shared scrubber across all cameras.',
+              )}
             </p>
           </div>
           <div
             className="actions"
             style={{ margin: 0, gap: 10, alignItems: 'center' }}
           >
-            {flow === 'upload' ? (
-              <button
-                className="btn btn-ghost"
-                type="button"
-                data-testid="review-home"
-                onClick={() => {
-                  pause();
-                  clearUploadCapture();
-                  setFlow('home');
-                  go(0);
-                }}
-              >
-                {t('Home')}
-              </button>
-            ) : (
-              <label
-                className="field"
+            <label
+              className="field"
+              style={{
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                textTransform: 'none',
+                letterSpacing: 0,
+              }}
+            >
+              {t('Trial')}
+              <select
+                value={trialName}
+                onChange={(e) => setTrialName(e.target.value)}
+                data-testid="review-trial-picker"
                 style={{
-                  margin: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 12,
-                  textTransform: 'none',
-                  letterSpacing: 0,
+                  font: 'inherit',
+                  padding: '4px 8px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
                 }}
               >
-                {t('Trial')}
-                <select
-                  value={trialName}
-                  onChange={(e) => setTrialName(e.target.value)}
-                  data-testid="review-trial-picker"
-                  style={{
-                    font: 'inherit',
-                    padding: '4px 8px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  {pickerTrials.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+                {pickerTrials.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               className="btn btn-primary"
               type="button"
               data-testid="review-proceed-pose"
               onClick={() => go(7)}
             >
-              {flow === 'upload'
-                ? t('Proceed')
-                : t('Proceed to pose reconstruction')}
+              {t('Proceed to pose reconstruction')}
             </button>
-            {flow === 'upload' ? null : (
-              <>
-                <button
-                  className="btn btn-ghost"
-                  type="button"
-                  data-testid="review-record-another"
-                  onClick={() => {
-                    pause();
-                    go(5);
-                  }}
-                >
-                  {t('Record another')}
-                </button>
-                <LeaveButton
-                  label={t('Pair cameras')}
-                  target={2}
-                  busy={false}
-                  confirmText=""
-                  beforeLeave={pause}
-                  testId="review-pair-cameras"
-                />
-              </>
-            )}
+            <>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                data-testid="review-record-another"
+                onClick={() => {
+                  pause();
+                  go(5);
+                }}
+              >
+                {t('Record another')}
+              </button>
+              <CameraPairingButton
+                busy={false}
+                confirmText=""
+                beforeLeave={pause}
+                testId="review-pair-cameras"
+              />
+            </>
           </div>
         </div>
         <div
-          className={`grid-cams cams-${Math.max(camCount, 1)}${flow === 'upload' ? ' upload-video-tile' : ''}`}
+          className={`grid-cams cams-${Math.max(camCount, 1)}`}
           style={{ flex: 1, minHeight: 0 }}
           data-testid="review-video-grid"
         >
@@ -503,26 +467,6 @@ export function Review() {
             >
               {playing ? t('Pause') : t('Play')}
             </button>
-            {flow === 'upload' ? (
-              <div
-                className="speed-group"
-                role="group"
-                aria-label={t('Playback speed')}
-              >
-                {[0.5, 1].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    className={`speed-btn${rate === r ? ' on' : ''}`}
-                    aria-pressed={rate === r}
-                    data-testid={`review-speed-${r}`}
-                    onClick={() => setRate(r)}
-                  >
-                    {r}×
-                  </button>
-                ))}
-              </div>
-            ) : null}
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -530,30 +474,18 @@ export function Review() {
               disabled={!canTrim || !dirty}
               title={
                 trimming
-                  ? t(
-                      flow === 'upload'
-                        ? 'Replacing the uploaded video'
-                        : 'Replacing every view',
-                    )
+                  ? t('Replacing every view')
                   : !allLoaded
                     ? t('Available once every view has loaded')
                     : !dirty
                       ? t(
                           'Drag either end of the bar to choose the kept region',
                         )
-                      : t(
-                          flow === 'upload'
-                            ? 'Replace the uploaded video with this range'
-                            : 'Replace every uploaded video with this range',
-                        )
+                      : t('Replace every uploaded video with this range')
               }
               onClick={() => void applyTrim()}
             >
-              {trimming && !trimmed
-                ? t('Trimming…')
-                : flow === 'upload'
-                  ? t('Trim')
-                  : t('Trim all views')}
+              {trimming && !trimmed ? t('Trimming…') : t('Trim all views')}
             </button>
             {trimmed ? (
               <button
@@ -561,36 +493,30 @@ export function Review() {
                 className="btn btn-secondary btn-sm"
                 data-testid="review-revert"
                 disabled={trimming}
-                title={t(
-                  flow === 'upload'
-                    ? 'Put the video back to the file that was uploaded'
-                    : 'Put every view back on the video from the phones',
-                )}
+                title={t('Put every view back on the video from the phones')}
                 onClick={() => void revertTrim()}
               >
                 {trimming ? t('Reverting…') : t('Revert to original')}
               </button>
             ) : null}
-            {flow === 'upload' ? null : (
-              <div
-                className="speed-group"
-                role="group"
-                aria-label={t('Playback speed')}
-              >
-                {[0.5, 1].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    className={`speed-btn${rate === r ? ' on' : ''}`}
-                    aria-pressed={rate === r}
-                    data-testid={`review-speed-${r}`}
-                    onClick={() => setRate(r)}
-                  >
-                    {r}×
-                  </button>
-                ))}
-              </div>
-            )}
+            <div
+              className="speed-group"
+              role="group"
+              aria-label={t('Playback speed')}
+            >
+              {[0.5, 1].map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`speed-btn${rate === r ? ' on' : ''}`}
+                  aria-pressed={rate === r}
+                  data-testid={`review-speed-${r}`}
+                  onClick={() => setRate(r)}
+                >
+                  {r}×
+                </button>
+              ))}
+            </div>
           </div>
           <div
             className="scrub-track"
@@ -687,9 +613,7 @@ export function Review() {
           {allLoaded ? (
             <p className="sub scrub-trim-note">
               {t(
-                flow === 'upload'
-                  ? 'Drag either end, then trim. The uploaded video is cut to this range.'
-                  : 'Drag either end, then trim. Every view is cut to this range and the uploaded videos are replaced.',
+                'Drag either end, then trim. Every view is cut to this range and the uploaded videos are replaced.',
               )}
             </p>
           ) : null}
@@ -703,7 +627,7 @@ export function Review() {
             </p>
           ) : null}
         </div>
-        {hasImus && flow !== 'upload' ? (
+        {hasImus ? (
           <div className="imu-review show" data-testid="review-imu-traces">
             <div className="block-title" style={{ margin: 0 }}>
               {t('Recorded IMU traces')}

@@ -52,6 +52,8 @@ export type SaveSessionInput = {
   /** Shown while Save waits for phones still uploading / converting. */
   onProgress?: (message: string) => void;
   uploadPollMs?: number;
+  /** Keep review/playback available until End Assessment clears the session. */
+  clearTempAfterSave?: boolean;
   /**
    * Inject folder chooser / writer for tests.
    * Defaults to `window.motuscapLite`.
@@ -311,7 +313,11 @@ export async function saveSessionToFolder(
 
   // Keep temp copies while any video is missing so a later Save still has them.
   let clearedTemp = false;
-  if (trialId && failedVideos.length === 0) {
+  if (
+    trialId &&
+    failedVideos.length === 0 &&
+    input.clearTempAfterSave !== false
+  ) {
     clearedTemp = await backendClient
       .deleteRecordings(trialId)
       .then(() => true)

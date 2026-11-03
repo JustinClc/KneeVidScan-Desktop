@@ -3,28 +3,18 @@ import { viewSuffix } from './roles';
 export { CAM_MAX, roleLabelForIndex } from './roles';
 
 export const STEPS = [
-  'New Session',
-  'Pair',
-  'Subject',
-  'Capture',
-  'Review',
+  'Health questionnaire',
+  'Standing photos',
+  'Sit-to-stand Test',
+  'Sit-to-stand recording review',
   'Pose estimation',
+  'Final report',
 ] as const;
 
-/**
- * Screen ids. 0 is Cover (home). 9 is the upload portal.
- * Record steps keep the Open Design ids (no space-calibration step).
- * Upload Review and Pose reuse screens 6 and 7.
- */
-export type ScreenId = 0 | 1 | 2 | 4 | 5 | 6 | 7 | 8 | 9;
+/** Home is screen 0; the capture workflow uses the remaining screens. */
+export type ScreenId = 0 | 1 | 2 | 4 | 5 | 6 | 7 | 8;
 
-/** Record path only. Cover and the upload portal are not on this rail. */
-export const STEP_SCREENS: ScreenId[] = [1, 2, 4, 5, 6, 7];
-
-/** Upload path. Review and Pose share the record screens. */
-export const UPLOAD_STEPS = ['Upload', 'Review', 'Pose'] as const;
-
-export const UPLOAD_STEP_SCREENS: ScreenId[] = [9, 6, 7];
+export const STEP_SCREENS: ScreenId[] = [1, 4, 5, 6, 7, 8];
 
 export const VIEW_ROLES = [
   'Frontal View',

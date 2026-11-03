@@ -17,6 +17,7 @@ export type RecordingQualityState = {
 };
 
 export type BackendDevice = {
+  source?: 'usb';
   device_id: string;
   name: string;
   cam_index: number;
@@ -207,6 +208,15 @@ export const backendClient = {
       body: JSON.stringify({ device_name: deviceName }),
     }),
 
+  connectUsbCamera: (cameraId: string, name: string) =>
+    req<{ device_id: string; device_pairing_token: string }>(
+      '/v1/usb-cameras',
+      {
+        method: 'POST',
+        body: JSON.stringify({ camera_id: cameraId, name }),
+      },
+    ),
+
   listDevices: () => req<{ devices: BackendDevice[] }>('/v1/devices'),
 
   removeDevice: (id: string) =>
@@ -293,10 +303,13 @@ export const backendClient = {
       method: 'POST',
     }),
 
-  startTrial: (id: string) =>
+  startTrial: (
+    id: string,
+    options?: { leadMs: number; maxDurationMs: number },
+  ) =>
     req<{ ok: boolean; start_signal: StartSignal }>(
       `/v1/trials/${encodeURIComponent(id)}/start`,
-      { method: 'POST' },
+      { method: 'POST', body: options ? JSON.stringify(options) : undefined },
     ),
 
   stopTrial: (id: string) =>
@@ -439,12 +452,13 @@ export const backendClient = {
       }),
     }),
 
-  /** Send both accepted images in one request so a failed upload cannot replace only one. */
+  /** Send the annotated preview and clean original in one request so a failed upload cannot replace only one. */
   saveStandingCapture: (
     subjectId: string,
     code: 'F' | 'LL' | 'RL',
     shot: {
       filename: string;
+      /** Legacy crop slot contains the blurred, annotated report PNG. */
       croppedPng: Uint8Array;
       fullFilename: string;
       fullPng: Uint8Array;

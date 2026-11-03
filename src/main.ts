@@ -1,9 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { startLiteServer, type LiteServer } from './backend/server';
+import { createQuestionnaireFolder } from './lib/questionnaireSave';
+import { exportReportPdf } from './lib/reportExport';
+import type { ExportReportInput } from './preload';
+import type { QuestionnaireAnswers } from './lib/questionnaire';
 import { buildSubjectInfoCsv } from './lib/sessionSave';
 import {
   resolveChosenFolder,
@@ -24,6 +28,10 @@ if (started) {
   app.quit();
 }
 
+app.setName('KneeVidScan-Desktop');
+if (process.platform === 'win32')
+  app.setAppUserModelId('com.squirrel.KneeVidScanDesktop.KneeVidScan-Desktop');
+
 // Opt-in for headless / CI environments where GPU or sandbox is unavailable.
 if (process.env.MOTUSCAP_DISABLE_GPU === '1') {
   app.disableHardwareAcceleration();
@@ -38,17 +46,25 @@ let liteServer: LiteServer | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 const createWindow = () => {
+  const icon = path.join(
+    app.isPackaged ? process.resourcesPath : app.getAppPath() + '/assets',
+    'branding',
+    process.platform === 'win32' ? 'kneevidscan.ico' : 'kneevidscan.png',
+  );
+  if (process.platform === 'darwin') app.dock?.setIcon(icon);
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1100,
     minHeight: 700,
-    title: 'MotusCap Lite',
+    title: 'KneeVidScan-Desktop',
+    icon,
     backgroundColor: '#F4F6F9',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -96,7 +112,7 @@ async function chooseDirectory(
   const detail = `canceled=${result.canceled} paths=${result.filePaths.length}${
     result.filePaths.length ? ` ${result.filePaths.join(' | ')}` : ''
   }`;
-  console.log(`[MotusCap Lite] folder dialog "${title}": ${detail}`);
+  console.log(`[KneeVidScan-Desktop] folder dialog "${title}": ${detail}`);
   try {
     await fs.appendFile(
       path.join(app.getPath('temp'), 'motuscap-save-dialog.log'),
@@ -116,6 +132,54 @@ async function chooseDirectory(
 }
 
 app.whenReady().then(async () => {
+  ipcMain.handle('report:export', async (_event, input: ExportReportInput) =>
+    exportReportPdf(input, {
+      createWindow: () => {
+        const win = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            sandbox: true,
+            contextIsolation: true,
+            nodeIntegration: false,
+            javascript: false,
+          },
+        });
+        win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+        win.webContents.on('will-navigate', (event) => event.preventDefault());
+        return win;
+      },
+      openPath: (file) => shell.openPath(file),
+    }),
+  );
+  ipcMain.handle(
+    'save:questionnaire',
+    async (
+      _event,
+      answers: QuestionnaireAnswers,
+      title?: string,
+      buttonLabel?: string,
+    ) => {
+      try {
+        const picked = await chooseDirectory(
+          title || 'Choose the parent folder',
+          buttonLabel || 'Choose',
+        );
+        if (!picked.folder)
+          return {
+            ok: false,
+            cancelled: true,
+            error: 'Folder selection cancelled.',
+          };
+        const folder = await createQuestionnaireFolder(picked.folder, answers);
+        return { ok: true, folder };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
   ipcMain.handle(
     'dialog:chooseSaveFolder',
     async (_event, title?: string, buttonLabel?: string) => {
@@ -170,6 +234,7 @@ app.whenReady().then(async () => {
         heightCm?: string;
         weightKg?: string;
         destination?: 'existing' | 'new';
+        folder?: string;
         dialogTitle?: string;
         buttonLabel?: string;
       },
@@ -187,7 +252,9 @@ app.whenReady().then(async () => {
         typeof input?.buttonLabel === 'string' && input.buttonLabel
           ? input.buttonLabel
           : 'Choose';
-      const picked = await chooseDirectory(title, button);
+      const picked = input?.folder
+        ? { folder: input.folder }
+        : await chooseDirectory(title, button);
       if (!picked.folder) {
         return {
           ok: false,
@@ -204,7 +271,7 @@ app.whenReady().then(async () => {
         };
       }
       const folder =
-        destination === 'new'
+        !input?.folder && destination === 'new'
           ? joinSaveFolder(picked.folder, subjectBase(subjectId, subjectName))
           : picked.folder;
       const record = liteServer
@@ -215,7 +282,7 @@ app.whenReady().then(async () => {
         : null;
       if (record && record.subjectId !== subjectId) {
         console.log(
-          `[MotusCap Lite] posture photos were captured as ${record.subjectId}; saving them as ${subjectId}`,
+          `[KneeVidScan-Desktop] posture photos were captured as ${record.subjectId}; saving them as ${subjectId}`,
         );
       }
       const missingCrops = STANDING_SEQUENCE.filter((code) => {
@@ -274,7 +341,7 @@ app.whenReady().then(async () => {
         );
         written.push(csvName);
         console.log(
-          `[MotusCap Lite] saved subject folder ${folder} (${written.length} files)`,
+          `[KneeVidScan-Desktop] saved subject folder ${folder} (${written.length} files)`,
         );
         return { ok: true, folder, written, missing };
       } catch (err) {
@@ -343,10 +410,10 @@ app.whenReady().then(async () => {
       recordingsRoot: path.join(app.getPath('temp'), 'motuscap-lite'),
     });
     console.log(
-      `[MotusCap Lite] backend ${liteServer.apiBase} (PWA ${liteServer.pwaBase})`,
+      `[KneeVidScan-Desktop] backend ${liteServer.apiBase} (PWA ${liteServer.pwaBase})`,
     );
   } catch (err) {
-    console.error('[MotusCap Lite] failed to start local backend', err);
+    console.error('[KneeVidScan-Desktop] failed to start local backend', err);
   }
 
   ipcMain.handle('backend:info', () =>
@@ -384,6 +451,8 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   void server
     .close()
-    .catch((err) => console.error('[MotusCap Lite] backend close failed', err))
+    .catch((err) =>
+      console.error('[KneeVidScan-Desktop] backend close failed', err),
+    )
     .finally(() => app.quit());
 });

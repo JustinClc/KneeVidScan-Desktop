@@ -35,7 +35,7 @@ describe('Locale', () => {
     setLocale('zh-Hans');
     expect(t('Upload media')).toBe('上传视频');
     expect(t('Scan with the phone on the same network.')).toContain('网络');
-    expect(t('MotusCap Lite')).toBe('MotusCap Lite');
+    expect(t('KneeVidScan-Desktop')).toBe('膝關照-桌面版');
   });
 
   it('falls back to English when a sentence has no translation', () => {

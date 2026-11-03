@@ -1,8 +1,112 @@
 /**
  * Product copy for Traditional Chinese (Hong Kong) and Simplified Chinese (Mainland).
- * The English sentence is the key. The product name is never an entry.
+ * The English sentence or product name is the key.
  */
 export const zhHant: Record<string, string> = {
+  'Sit-to-stand Test': '坐站測試',
+  'Sit-to-stand recording review': '坐站測試錄影檢視',
+  'Watch the instructions, then sit with either side facing the camera. Recording starts automatically when your position is ready.':
+    '請先觀看指示，再側身面向相機坐下。姿勢就緒後將自動開始錄影。',
+  'Side-view camera': '側面相機',
+  'Camera {number}': '相機 {number}',
+  'Stop recording': '停止錄影',
+  'Retry camera stop': '重試停止相機錄影',
+  'Could not stop recording. Please retry.': '無法停止錄影，請重試。',
+  'Sit-to-stand instruction video placeholder': '坐站測試教學影片預留位置',
+  'How to perform the sit-to-stand test': '如何進行坐站測試',
+  'Instruction video coming soon': '教學影片待提供',
+  'Proceed to recording': '進入錄影',
+  'Connect a camera to proceed.': '請先連接相機以繼續。',
+  'Use a stable chair. Sit with your left or right side facing the side-view camera and keep your whole body inside the frame. When recording begins, repeatedly stand up and sit down for 20 seconds.':
+    '請使用穩固的椅子，左側或右側朝向側面相機坐下，並保持全身在框內。錄影開始後，反覆站起和坐下，持續 20 秒。',
+  'Sit inside the frame': '請坐在框內',
+  'Hold your seated position': '請保持坐姿',
+  'Stand up and sit down repeatedly': '請反覆站起和坐下',
+  'Waiting for a clear side view of your seated posture.':
+    '等待清晰的側面坐姿影像。',
+  'Position changed. Sit inside the frame to restart the countdown.':
+    '姿勢已改變，請坐在框內以重新倒數。',
+  'Pose detection unavailable. Check the local pose model assets and reconnect the camera.':
+    '無法進行姿勢偵測，請檢查本機姿勢模型檔案並重新連接相機。',
+  'Turn so your left or right side faces the camera.':
+    '請轉身，使左側或右側朝向相機。',
+  'Keep your ear, shoulder, hip, knee and ankle visible inside the frame.':
+    '請讓耳朵、肩膀、髖部、膝部及腳踝保持在框內並清晰可見。',
+  'Position ready. Hold still until recording starts.':
+    '姿勢就緒，請保持不動，等待錄影開始。',
+  'Sit on the chair with your hip at 70–120° and knee at 70–110°.':
+    '請坐在椅子上，髖部角度保持 70–120°，膝部角度保持 70–110°。',
+  'Seated position ready': '坐姿就緒',
+  'Adjust your seated position': '請調整坐姿',
+  'Sit-to-stand motion': '坐站動作示範',
+  'GIF coming soon': '動態示範待提供',
+  'Complete the questionnaire, take standing photos, record trials, then run pose estimation.':
+    '填寫問卷、拍攝站立照片、錄製試次，然後進行姿態估算。',
+  'Start Assessment': '開始評估',
+  'No camera paired': '尚未配對相機',
+  Done: '完成',
+  'Back to questionnaire': '返回問卷',
+  'Wireless phone instructions': '無線手機連接說明',
+  'Standing photos': '站立照片',
+  Recording: '錄影',
+  'Recording review': '錄影檢視',
+  'Connect USB cameras or scan a QR with each phone. Use up to 3 cameras in any combination. IMUs are optional.':
+    '連接 USB 相機或用每部手機掃描二維碼。最多可混合使用 3 部相機。慣性感測器為可選。',
+  'USB / computer cameras': 'USB / 電腦相機',
+  'Connect a USB camera to this computer, then refresh the camera list. Built-in cameras are also available.':
+    '將 USB 相機連接到此電腦，然後重新整理相機清單。亦可選擇內置相機。',
+  'Please wait…': '請稍候…',
+  'Refresh cameras': '重新整理相機',
+  'Select camera': '選擇相機',
+  'Connect camera': '連接相機',
+  'No unconnected cameras found. Check the USB connection and camera permissions.':
+    '找不到未連接的相機。請檢查 USB 連接和相機權限。',
+  'Could not connect camera: {detail}': '無法連接相機：{detail}',
+  'Camera access is unavailable on this computer.': '此電腦無法存取相機。',
+  'Video recording is unavailable on this computer.': '此電腦無法錄影。',
+  'No supported video recording format.': '沒有支援的錄影格式。',
+  'Camera has no frame yet.': '相機尚未傳送畫面。',
+  'Camera disconnected. Remove it and connect it again.':
+    '相機已斷線。請移除後重新連接。',
+  'USB camera recording failed.': 'USB 相機錄影失敗。',
+  'USB camera upload failed. Retrying automatically.':
+    'USB 相機上載失敗。正在自動重試。',
+  'A USB camera is already connecting.': '正在連接 USB 相機。',
+  'This camera is already connected': '此相機已連接',
+  'Camera ID and name required': '必須提供相機編號和名稱',
+  'Remove Cam {n}{role}? This camera must be connected again to be used.':
+    '移除相機 {n}{role}？此相機必須重新連接才可使用。',
+  'Personal information': '個人信息',
+  'Health questionnaire': '健康問卷',
+  'Name/SID': '姓名/編號',
+  'Tel.': '手機號碼',
+  'Please enter': '請輸入',
+  Age: '年齡',
+  Sex: '性別',
+  Male: '男',
+  Female: '女',
+  'Height (m)': '身高（m）',
+  'Weight (kg)': '體重（kg）',
+  'Smoking habit': '吸煙習慣',
+  'Work activity level': '日常活動水平',
+  'Mostly sit': '多數時間坐',
+  'Sit and stand/walk': '坐與站/行走時間大致相同',
+  'Mostly stand/walk': '多數時間站立/行走',
+  'Deal with loads of < 50 lbs': '需要提舉物品 < 50磅',
+  'Deal with loads of > 50 lbs': '需要提舉物品 > 50磅',
+  'Diabetes history': '糖尿病病史',
+  'History of knee injury affecting mobility for more than 2 weeks':
+    '膝關節曾受傷，並影響活動能力超過 2 星期',
+  'History of knee surgery': '曾接受膝關節手術',
+  'Persistent clicking sound in the knee': '膝關節持續有摩擦聲出現 (咔噠聲)',
+  'Use of walking aid': '需使用步行輔助用具',
+  'Degree of knee pain within the recent month (0: no pain, 10: the most painful)':
+    '近一個月內膝關節疼痛程度 (0無痛 10最痛)',
+  Yes: '是',
+  No: '否',
+  Submit: '提交報告',
+  'Fields marked * are required.': '標有 * 的問題為必填。',
+  'KneeVidScan-Desktop': '膝關照-桌面版',
   Locale: '語言',
   'Start recording': '開始錄製',
   'Upload media': '上載影片',
@@ -47,8 +151,8 @@ export const zhHant: Record<string, string> = {
   'Demo — squat form': '示範 — 深蹲姿勢',
   '2 cameras · 4 trials · Oct 9': '2 部相機 · 4 個試次 · 10 月 9 日',
   'Pair cameras': '配對相機',
-  'Scan a QR with each phone. MotusCap Lite pairs 1 to 3 cameras. IMUs are optional.':
-    '用每部手機掃描 QR。MotusCap Lite 可配對 1 至 3 部相機。慣性感測器可選。',
+  'Scan a QR with each phone. KneeVidScan-Desktop pairs 1 to 3 cameras. IMUs are optional.':
+    '用每部手機掃描 QR。膝關照-桌面版 可配對 1 至 3 部相機。慣性感測器可選。',
   'Phone PWA · {protocol} · {host}': '手機頁面 · {protocol} · {host}',
   'Backend ready': '後端已就緒',
   'Starting local backend…': '正在啟動本機後端…',
@@ -113,8 +217,8 @@ export const zhHant: Record<string, string> = {
   '{n} connected': '已連線 {n} 個',
   'UI mock only — no BLE. Tap any subset (Femur L/R · Tibia L/R).':
     '只是介面示範 — 沒有藍牙。可點選任何組合（股骨 L/R · 脛骨 L/R）。',
-  'MotusCap Lite runs with cameras only. Add IMUs for extra joint signals during Capture and Review.':
-    'MotusCap Lite 可以只用相機運作。加入慣性感測器可在擷取和檢視時提供額外關節訊號。',
+  'KneeVidScan-Desktop runs with cameras only. Add IMUs for extra joint signals during Capture and Review.':
+    '膝關照-桌面版 可以只用相機運作。加入慣性感測器可在擷取和檢視時提供額外關節訊號。',
   'Continue with cameras alone anytime · IMUs optional':
     '隨時可以只用相機繼續 · 慣性感測器可選',
   '{n} camera ready · {imu}': '{n} 部相機就緒 · {imu}',
@@ -177,6 +281,14 @@ export const zhHant: Record<string, string> = {
   'Tibia R': '脛骨 R',
   'No signal yet · backend later': '尚未有訊號 · 後端稍後提供',
   'No recording yet': '尚未有紀錄',
+  'Standing Posture Capture': '站立姿勢拍攝',
+  'Save & Continue': '儲存並繼續',
+  'Complete the questionnaire to create a subject folder first.':
+    '請先完成問卷以建立受試者資料夾。',
+  'Questionnaire saving is unavailable. Open the desktop app.':
+    '無法儲存問卷。請開啟桌面應用程式。',
+  'Capture three natural standing postures with the frontal camera. Each photo is taken automatically once the pose is in the frame, then reviewed.':
+    '使用正面相機拍攝三個自然站立姿勢。姿勢進入畫面後會自動拍攝，然後供你檢視。',
   'Subject & standing posture': '受試者與站立姿勢',
   'Photos are taken on the frontal camera and checked automatically once the pose is in the frame, then reviewed.':
     '照片由正面相機拍攝。姿勢進入畫面後會自動檢查，然後供你檢視。',
@@ -187,7 +299,6 @@ export const zhHant: Record<string, string> = {
     '必填。會用在每個儲存檔名。顯示名稱中的空格會變成連字號。',
   'Enter a subject ID to continue.': '請輸入受試者編號以繼續。',
   'Height (cm)': '身高（厘米）',
-  'Weight (kg)': '體重（公斤）',
   'Standing posture': '站立姿勢',
   Frontal: '正面',
   'Left lateral': '左側面',
@@ -267,7 +378,11 @@ export const zhHant: Record<string, string> = {
   'Right knee': '右膝',
   'Right ankle': '右踝',
   'Right heel': '右腳跟',
+  'Saving videos for {name}…': '正在儲存 {name} 的影片…',
   Proceed: '繼續',
+  'Final report': '最終報告',
+  'Final report to be implemented.': '最終報告功能尚待實作。',
+  '← Back to pose estimation': '← 返回姿態估計',
   Retake: '重拍',
   'Retaking…': '正在重拍…',
   'Retake {name} posture': '重拍{name}站立姿勢',
@@ -284,7 +399,6 @@ export const zhHant: Record<string, string> = {
   'Recording starts in': '錄製即將開始，倒數',
   'Ask the subject to wait': '請讓受試者稍候',
   'Ask the subject to start moving now': '請立即指示受試者開始做動作',
-  Recording: '錄製中',
   'Real-time 2D pose': '即時 2D 姿態',
   'Recording quality': '錄製畫質',
   'Recommended: {preset}': '建議：{preset}',
@@ -510,7 +624,7 @@ export const zhHant: Record<string, string> = {
   '← Back to review': '← 返回檢視',
   'Pairing ID {id}': '配對編號 {id}',
   'Desktop answered {status}': '桌面電腦回應 {status}',
-  'MotusCap Lite · Pair phone': 'MotusCap Lite · 配對手機',
+  'KneeVidScan-Desktop · Pair phone': '膝關照-桌面版 · 配對手機',
   Preview: '預覽',
   'IMU signals · live': '慣性感測器訊號 · 即時',
   'Drag to resize': '拖動以調整大小',
@@ -604,6 +718,110 @@ export const zhHant: Record<string, string> = {
 };
 
 export const zhHans: Record<string, string> = {
+  'Sit-to-stand Test': '坐站测试',
+  'Sit-to-stand recording review': '坐站测试录像回看',
+  'Watch the instructions, then sit with either side facing the camera. Recording starts automatically when your position is ready.':
+    '请先观看指示，再侧身面向相机坐下。姿势就绪后将自动开始录制。',
+  'Side-view camera': '侧面相机',
+  'Camera {number}': '相机 {number}',
+  'Stop recording': '停止录制',
+  'Retry camera stop': '重试停止相机录制',
+  'Could not stop recording. Please retry.': '无法停止录制，请重试。',
+  'Sit-to-stand instruction video placeholder': '坐站测试教学视频预留位置',
+  'How to perform the sit-to-stand test': '如何进行坐站测试',
+  'Instruction video coming soon': '教学视频待提供',
+  'Proceed to recording': '进入录制',
+  'Connect a camera to proceed.': '请先连接相机以继续。',
+  'Use a stable chair. Sit with your left or right side facing the side-view camera and keep your whole body inside the frame. When recording begins, repeatedly stand up and sit down for 20 seconds.':
+    '请使用稳固的椅子，左侧或右侧朝向侧面相机坐下，并保持全身在框内。录制开始后，反复站起和坐下，持续 20 秒。',
+  'Sit inside the frame': '请坐在框内',
+  'Hold your seated position': '请保持坐姿',
+  'Stand up and sit down repeatedly': '请反复站起和坐下',
+  'Waiting for a clear side view of your seated posture.':
+    '等待清晰的侧面坐姿图像。',
+  'Position changed. Sit inside the frame to restart the countdown.':
+    '姿势已改变，请坐在框内以重新倒计时。',
+  'Pose detection unavailable. Check the local pose model assets and reconnect the camera.':
+    '无法进行姿势检测，请检查本机姿势模型文件并重新连接相机。',
+  'Turn so your left or right side faces the camera.':
+    '请转身，使左侧或右侧朝向相机。',
+  'Keep your ear, shoulder, hip, knee and ankle visible inside the frame.':
+    '请让耳朵、肩膀、髋部、膝部及脚踝保持在框内并清晰可见。',
+  'Position ready. Hold still until recording starts.':
+    '姿势就绪，请保持不动，等待录制开始。',
+  'Sit on the chair with your hip at 70–120° and knee at 70–110°.':
+    '请坐在椅子上，髋部角度保持 70–120°，膝部角度保持 70–110°。',
+  'Seated position ready': '坐姿就绪',
+  'Adjust your seated position': '请调整坐姿',
+  'Sit-to-stand motion': '坐站动作示范',
+  'GIF coming soon': '动态示范待提供',
+  'Complete the questionnaire, take standing photos, record trials, then run pose estimation.':
+    '填写问卷、拍摄站立照片、录制试次，然后进行姿态估算。',
+  'Start Assessment': '开始评估',
+  'No camera paired': '尚未配对相机',
+  Done: '完成',
+  'Back to questionnaire': '返回问卷',
+  'Wireless phone instructions': '无线手机连接说明',
+  'Standing photos': '站立照片',
+  Recording: '录像',
+  'Recording review': '录像查看',
+  'Connect USB cameras or scan a QR with each phone. Use up to 3 cameras in any combination. IMUs are optional.':
+    '连接 USB 相机或用每部手机扫描二维码。最多可混合使用 3 部相机。惯性传感器为可选。',
+  'USB / computer cameras': 'USB / 电脑相机',
+  'Connect a USB camera to this computer, then refresh the camera list. Built-in cameras are also available.':
+    '将 USB 相机连接到此电脑，然后刷新相机列表。也可选择内置相机。',
+  'Please wait…': '请稍候…',
+  'Refresh cameras': '刷新相机',
+  'Select camera': '选择相机',
+  'Connect camera': '连接相机',
+  'No unconnected cameras found. Check the USB connection and camera permissions.':
+    '找不到未连接的相机。请检查 USB 连接和相机权限。',
+  'Could not connect camera: {detail}': '无法连接相机：{detail}',
+  'Camera access is unavailable on this computer.': '此电脑无法访问相机。',
+  'Video recording is unavailable on this computer.': '此电脑无法录像。',
+  'No supported video recording format.': '没有支持的录像格式。',
+  'Camera has no frame yet.': '相机尚未传送画面。',
+  'Camera disconnected. Remove it and connect it again.':
+    '相机已断开。请移除后重新连接。',
+  'USB camera recording failed.': 'USB 相机录像失败。',
+  'USB camera upload failed. Retrying automatically.':
+    'USB 相机上传失败。正在自动重试。',
+  'A USB camera is already connecting.': '正在连接 USB 相机。',
+  'This camera is already connected': '此相机已连接',
+  'Camera ID and name required': '必须提供相机编号和名称',
+  'Remove Cam {n}{role}? This camera must be connected again to be used.':
+    '移除相机 {n}{role}？此相机必须重新连接才可使用。',
+  'Personal information': '个人信息',
+  'Health questionnaire': '健康问卷',
+  'Name/SID': '姓名/编号',
+  'Tel.': '手机号码',
+  'Please enter': '请输入',
+  Age: '年龄',
+  Sex: '性别',
+  Male: '男',
+  Female: '女',
+  'Height (m)': '身高（m）',
+  'Weight (kg)': '体重（kg）',
+  'Smoking habit': '吸烟习惯',
+  'Work activity level': '日常活动水平',
+  'Mostly sit': '多数时间坐',
+  'Sit and stand/walk': '坐与站/行走时间大致相同',
+  'Mostly stand/walk': '多数时间站立/行走',
+  'Deal with loads of < 50 lbs': '需要提举物品 < 50磅',
+  'Deal with loads of > 50 lbs': '需要提举物品 > 50磅',
+  'Diabetes history': '糖尿病病史',
+  'History of knee injury affecting mobility for more than 2 weeks':
+    '膝关节曾受伤，并影响活动能力超过 2 星期',
+  'History of knee surgery': '曾接受膝关节手术',
+  'Persistent clicking sound in the knee': '膝关节持续有摩擦声出现 (咔哒声)',
+  'Use of walking aid': '需使用步行辅助用具',
+  'Degree of knee pain within the recent month (0: no pain, 10: the most painful)':
+    '近一个月内膝关节疼痛程度 (0无痛 10最痛)',
+  Yes: '是',
+  No: '否',
+  Submit: '提交报告',
+  'Fields marked * are required.': '标有 * 的问题为必填。',
+  'KneeVidScan-Desktop': '膝關照-桌面版',
   Locale: '语言',
   'Start recording': '开始录制',
   'Upload media': '上传视频',
@@ -648,8 +866,8 @@ export const zhHans: Record<string, string> = {
   'Demo — squat form': '演示 — 深蹲姿态',
   '2 cameras · 4 trials · Oct 9': '2 个相机 · 4 个试次 · 10 月 9 日',
   'Pair cameras': '配对相机',
-  'Scan a QR with each phone. MotusCap Lite pairs 1 to 3 cameras. IMUs are optional.':
-    '用每部手机扫描 QR。MotusCap Lite 可配对 1 至 3 个相机。惯性传感器可选。',
+  'Scan a QR with each phone. KneeVidScan-Desktop pairs 1 to 3 cameras. IMUs are optional.':
+    '用每部手机扫描 QR。膝關照-桌面版 可配对 1 至 3 个相机。惯性传感器可选。',
   'Phone PWA · {protocol} · {host}': '手机页面 · {protocol} · {host}',
   'Backend ready': '后端已就绪',
   'Starting local backend…': '正在启动本地后端…',
@@ -714,8 +932,8 @@ export const zhHans: Record<string, string> = {
   '{n} connected': '已连接 {n} 个',
   'UI mock only — no BLE. Tap any subset (Femur L/R · Tibia L/R).':
     '只是界面演示 — 没有蓝牙。可点选任何组合（股骨 L/R · 胫骨 L/R）。',
-  'MotusCap Lite runs with cameras only. Add IMUs for extra joint signals during Capture and Review.':
-    'MotusCap Lite 可以只用相机运行。加入惯性传感器可在采集和查看时提供额外关节信号。',
+  'KneeVidScan-Desktop runs with cameras only. Add IMUs for extra joint signals during Capture and Review.':
+    '膝關照-桌面版 可以只用相机运行。加入惯性传感器可在采集和查看时提供额外关节信号。',
   'Continue with cameras alone anytime · IMUs optional':
     '随时可以只用相机继续 · 惯性传感器可选',
   '{n} camera ready · {imu}': '{n} 个相机就绪 · {imu}',
@@ -778,6 +996,14 @@ export const zhHans: Record<string, string> = {
   'Tibia R': '胫骨 R',
   'No signal yet · backend later': '尚无信号 · 后端稍后提供',
   'No recording yet': '尚无记录',
+  'Standing Posture Capture': '站立姿态拍摄',
+  'Save & Continue': '保存并继续',
+  'Complete the questionnaire to create a subject folder first.':
+    '请先完成问卷以建立受试者文件夹。',
+  'Questionnaire saving is unavailable. Open the desktop app.':
+    '无法保存问卷。请打开桌面应用程序。',
+  'Capture three natural standing postures with the frontal camera. Each photo is taken automatically once the pose is in the frame, then reviewed.':
+    '使用正面相机拍摄三个自然站立姿态。姿态进入画面后会自动拍摄，然后供你查看。',
   'Subject & standing posture': '受试者与站立姿态',
   'Photos are taken on the frontal camera and checked automatically once the pose is in the frame, then reviewed.':
     '照片由正面相机拍摄。姿态进入画面后会自动检查，然后供你查看。',
@@ -788,7 +1014,6 @@ export const zhHans: Record<string, string> = {
     '必填。会用在每个保存文件名中。显示名称中的空格会变成连字符。',
   'Enter a subject ID to continue.': '请输入受试者编号以继续。',
   'Height (cm)': '身高（厘米）',
-  'Weight (kg)': '体重（公斤）',
   'Standing posture': '站立姿态',
   Frontal: '正面',
   'Left lateral': '左侧面',
@@ -868,7 +1093,11 @@ export const zhHans: Record<string, string> = {
   'Right knee': '右膝',
   'Right ankle': '右踝',
   'Right heel': '右脚跟',
+  'Saving videos for {name}…': '正在保存 {name} 的视频…',
   Proceed: '继续',
+  'Final report': '最终报告',
+  'Final report to be implemented.': '最终报告功能尚待实现。',
+  '← Back to pose estimation': '← 返回姿态估计',
   Retake: '重拍',
   'Retaking…': '正在重拍…',
   'Retake {name} posture': '重拍{name}站立姿势',
@@ -885,7 +1114,6 @@ export const zhHans: Record<string, string> = {
   'Recording starts in': '录制即将开始，倒数',
   'Ask the subject to wait': '请让受试者稍候',
   'Ask the subject to start moving now': '请立即指示受试者开始做动作',
-  Recording: '录制中',
   'Real-time 2D pose': '实时 2D 姿态',
   'Recording quality': '录制画质',
   'Recommended: {preset}': '建议：{preset}',
@@ -1111,7 +1339,7 @@ export const zhHans: Record<string, string> = {
   '← Back to review': '← 返回查看',
   'Pairing ID {id}': '配对编号 {id}',
   'Desktop answered {status}': '台式机回应 {status}',
-  'MotusCap Lite · Pair phone': 'MotusCap Lite · 配对手机',
+  'KneeVidScan-Desktop · Pair phone': '膝關照-桌面版 · 配对手机',
   Preview: '预览',
   'IMU signals · live': '惯性传感器信号 · 实时',
   'Drag to resize': '拖动以调整大小',

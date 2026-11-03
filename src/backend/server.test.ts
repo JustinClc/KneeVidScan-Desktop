@@ -129,6 +129,119 @@ describe('Lite HTTPS backend smoke', () => {
     }
   });
 
+  it('broadcasts sit-to-stand timing and rejects invalid timing requests', async () => {
+    server = await startLiteServer({ preferHttps: false });
+    const base = `http://127.0.0.1:${server.port}`;
+    const trial = store.createTrial('sit01');
+    const start = (body: object) =>
+      fetch(`${base}/v1/trials/${trial.id}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    expect((await start({ leadMs: 5000, maxDurationMs: 0 })).status).toBe(400);
+    expect(store.trials.get(trial.id)?.phase).toBe('idle');
+    const before = Date.now();
+    const response = await start({ leadMs: 5000, maxDurationMs: 20000 });
+    expect(response.status).toBe(200);
+    const { start_signal } = await response.json();
+    expect(start_signal.maxDurationMs).toBe(20000);
+    expect(start_signal.startAtMs).toBeGreaterThanOrEqual(before + 5000);
+    expect(start_signal.startAtMs).toBeLessThanOrEqual(Date.now() + 5000);
+  });
+
+  it('registers USB cameras with the shared preview, still and recording endpoints', async () => {
+    server = await startLiteServer({ preferHttps: false });
+    const base = `http://127.0.0.1:${server.port}`;
+    const post = (path: string, body?: object) =>
+      fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body ?? {}),
+      });
+    const response = await post('/v1/usb-cameras', {
+      camera_id: 'usb-hardware-1',
+      name: 'USB camera',
+    });
+    expect(response.status).toBe(201);
+    const camera = await response.json();
+    const auth = { Authorization: `Bearer ${camera.device_pairing_token}` };
+    expect(
+      (
+        await post('/v1/usb-cameras', {
+          camera_id: 'usb-hardware-1',
+          name: 'Duplicate',
+        })
+      ).status,
+    ).toBe(409);
+    const listed = await (await fetch(`${base}/v1/devices`)).json();
+    expect(listed.devices).toEqual([
+      expect.objectContaining({
+        device_id: camera.device_id,
+        source: 'usb',
+        name: 'USB camera',
+      }),
+    ]);
+    expect(listed.devices[0]).not.toHaveProperty('device_pairing_token');
+    const devicePath = `/v1/devices/${camera.device_id}`;
+    expect(
+      (
+        await fetch(`${base}${devicePath}/preview`, {
+          method: 'POST',
+          headers: { ...auth, 'Content-Type': 'image/jpeg' },
+          body: Buffer.from('preview'),
+        })
+      ).status,
+    ).toBe(204);
+    expect((await fetch(`${base}${devicePath}/preview`)).status).toBe(200);
+    await post(`${devicePath}/still-request`);
+    expect(
+      (
+        await (
+          await fetch(`${base}${devicePath}/still-request`, { headers: auth })
+        ).json()
+      ).pending,
+    ).toBe(true);
+    expect(
+      (
+        await fetch(`${base}${devicePath}/still`, {
+          method: 'POST',
+          headers: { ...auth, 'Content-Type': 'image/jpeg' },
+          body: Buffer.from('still'),
+        })
+      ).status,
+    ).toBe(200);
+    const created = await (
+      await post('/v1/trials', { name: 'usb-trial' })
+    ).json();
+    await post(`/v1/trials/${created.trial_id}/arm`);
+    await post(`/v1/trials/${created.trial_id}/start`);
+    const active = await (await fetch(`${base}/v1/trials/active`)).json();
+    expect(active.trial.participants).toContain(camera.device_id);
+    await post(`/v1/trials/${created.trial_id}/stop`);
+    expect(
+      (
+        await fetch(
+          `${base}${devicePath}/trials/${created.trial_id}/upload?filename=usb.mp4`,
+          {
+            method: 'POST',
+            headers: { ...auth, 'Content-Type': 'video/mp4' },
+            body: MP4_HEAD,
+          },
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await fetch(`${base}${devicePath}/trials/${created.trial_id}/upload`))
+        .status,
+    ).toBe(200);
+    await fetch(`${base}${devicePath}`, { method: 'DELETE' });
+    expect(
+      (await fetch(`${base}${devicePath}/still-request`, { headers: auth }))
+        .status,
+    ).toBe(401);
+  });
+
   it('publishes the operator Locale and ignores an unknown one', async () => {
     server = await startLiteServer({ preferHttps: false });
     const base = `http://127.0.0.1:${server.port}`;

@@ -1,7 +1,7 @@
 /**
  * File naming helpers — spaces → hyphens; non-ASCII kept as typed.
  * Single-cam: no view suffix. Multi-cam: _F / _L / _O.
- * Standing posture PNGs: …_standing_F / _LL / _RL.png
+ * Annotated posture PNGs: …_standing_F / _LL / _RL_annotated.png
  */
 import { viewSuffix } from './roles';
 
@@ -71,10 +71,10 @@ export function standingFileName(
   displayName: string,
   code: StandingCode,
 ): string {
-  return `${subjectBase(subjectId, displayName)}_standing_${code}.png`;
+  return `${subjectBase(subjectId, displayName)}_standing_${code}_annotated.png`;
 }
 
-/** Uncropped original kept beside the guide-frame crop. */
+/** Uncropped clean original kept beside the blurred, annotated report image. */
 export function standingFullFileName(
   subjectId: string,
   displayName: string,

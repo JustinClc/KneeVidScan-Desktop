@@ -1,12 +1,12 @@
 {
-  "name": "@motuscap-lite/desktop",
-  "productName": "MotusCap Lite",
+  "name": "kneevidscan-desktop",
+  "productName": "KneeVidScan-Desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "MotusCap Lite — desktop operator app for synced multi-phone capture and per-camera pose",
+  "description": "KneeVidScan-Desktop — standing image capture, synced multi-phone video recording and per-camera pose analysis",
   "license": "UNLICENSED",
   "author": {
-    "name": "MotusCap Lite"
+    "name": "KneeVidScan"
   },
   "main": ".vite/build/main.cjs",
   "scripts": {

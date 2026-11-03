@@ -86,7 +86,7 @@ export async function generateLocalCerts(
   extraHosts: string[] = [],
 ): Promise<CertBundle> {
   const hosts = [...new Set([...listLanAddresses(), ...extraHosts])];
-  const attrs = [{ name: 'commonName', value: 'MotusCap Lite Local' }];
+  const attrs = [{ name: 'commonName', value: 'KneeVidScan-Desktop Local' }];
   const altNames = hosts.map((value) => {
     const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(value);
     return isIp ? { type: 7 as const, ip: value } : { type: 2 as const, value };
