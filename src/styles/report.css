@@ -1,5 +1,8 @@
 .assessment-report {
   --report-panel: #f6f9fc;
+  --report-risk-low: #125d9e;
+  --report-risk-medium: #a86a00;
+  --report-risk-high: #cb2026;
   color: #253247;
   font-family:
     Inter,
@@ -125,13 +128,22 @@
   white-space: nowrap;
 }
 .report-score-copy p:nth-of-type(1) {
-  color: #125d9e;
+  color: var(--report-risk-low);
 }
 .report-score-copy p:nth-of-type(2) {
-  color: #a86a00;
+  color: var(--report-risk-medium);
 }
 .report-score-copy p:nth-of-type(3) {
-  color: #cb2026;
+  color: var(--report-risk-high);
+}
+.report-risk-low {
+  color: #008548;
+}
+.report-risk-medium {
+  color: var(--report-risk-medium);
+}
+.report-risk-high {
+  color: var(--report-risk-high);
 }
 .report-posture-note {
   color: #718097;
@@ -185,13 +197,15 @@
 }
 .report-evaluation {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  grid-template-columns: 1fr;
+  gap: 12px;
   margin-top: 20px;
+  break-inside: avoid;
+}
+.report-evaluation > div {
   padding: 18px 20px;
   border-radius: 10px;
   background: #eaf3fc;
-  break-inside: avoid;
 }
 .report-evaluation p,
 .report-disclaimer p {
@@ -207,6 +221,15 @@
   margin-top: 14px;
   color: #88602a;
   break-inside: avoid;
+}
+.report-evaluation .report-overall-content {
+  font-size: 15px;
+}
+.report-evaluation ul {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 6px 0 0;
+  padding-left: 20px;
 }
 .report-disclaimer h2 {
   color: #9b651b;
@@ -366,9 +389,11 @@
     font-size: 9px;
   }
   .report-evaluation {
-    gap: 12px;
-    padding: 10px 12px;
+    gap: 8px;
     margin-top: 12px;
+  }
+  .report-evaluation > div {
+    padding: 8px 12px;
   }
   .report-evaluation p,
   .report-disclaimer p {
@@ -379,6 +404,13 @@
   .report-disclaimer {
     padding: 9px 12px;
     margin-top: 9px;
+  }
+  .report-evaluation .report-overall-content {
+    font-size: 12px;
+  }
+  .report-evaluation ul {
+    font-size: 11px;
+    line-height: 1.5;
   }
   .report-disclaimer h2 {
     font-size: 10px;

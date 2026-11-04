@@ -284,7 +284,28 @@ export function AssessmentReport(props: AssessmentReportProps) {
       <section className="report-evaluation">
         <div>
           <h2>{c.overall}</h2>
-          <p>{m.riskText}</p>
+          <p className="report-overall-content">
+            {m.riskText
+              .split(
+                /(\b(?:Low|Medium|Moderate|High) risk\b|[低中高]風險|[低中高]风险)/gi,
+              )
+              .map((part, index) => {
+                const level = /^(low risk|低風險|低风险)$/i.test(part)
+                  ? 'low'
+                  : /^(medium risk|moderate risk|中風險|中风险)$/i.test(part)
+                    ? 'medium'
+                    : /^(high risk|高風險|高风险)$/i.test(part)
+                      ? 'high'
+                      : null;
+                return level ? (
+                  <strong key={index} className={`report-risk-${level}`}>
+                    {part}
+                  </strong>
+                ) : (
+                  part
+                );
+              })}
+          </p>
         </div>
         <div>
           <h2>{c.recommendations}</h2>
