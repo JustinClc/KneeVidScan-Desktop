@@ -3,6 +3,11 @@
 The Electron main process invokes a native worker through stdin/stdout JSON.
 There is no hosted analysis API and no patient-media upload. Users do not install
 Python: each release includes a PyInstaller directory in `assets/analysis-worker`.
+This generated, platform-specific directory is not committed to Git.
+
+Development `pnpm start` opens the app without the worker. Analysis will show a
+retryable runtime error until the native worker is built. Release packaging still
+requires a current bundle for its target platform.
 
 ## Build on each supported target
 
@@ -11,9 +16,12 @@ Use Python **3.9**, matching the API's pinned model dependencies. On Linux insta
 (Apple Silicon or Intel), and Linux must each use a native runtime of the same
 architecture as the Electron package; PyInstaller is not a cross compiler.
 
-From the repository root:
+From the repository root, create and activate a Python 3.9 virtual environment
+(on macOS/Linux; on Windows activate `.venv-analysis\Scripts\activate`):
 
 ```sh
+python3.9 -m venv .venv-analysis
+source .venv-analysis/bin/activate
 python -m pip install -r analysis/requirements-build.txt
 python -m unittest discover -s analysis/tests -v
 python analysis/build_worker.py

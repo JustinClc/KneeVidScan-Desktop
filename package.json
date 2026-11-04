@@ -12,7 +12,7 @@
   "scripts": {
     "mediapipe:assets": "node scripts/fetch-mediapipe.mjs",
     "ffmpeg:assets": "node scripts/fetch-ffmpeg.mjs",
-    "start": "node scripts/ensure-analysis.mjs && pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge start",
+    "start": "pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge start",
     "package": "node scripts/ensure-analysis.mjs && pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge package",
     "make": "node scripts/ensure-analysis.mjs && pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge make",
     "make:win": "node scripts/ensure-analysis.mjs --platform=win32 --arch=x64 && pnpm mediapipe:assets && node scripts/fetch-ffmpeg.mjs --platform=win32 --arch=x64 && electron-forge make --platform=win32",

@@ -159,3 +159,5 @@ assets/ffmpeg/
 assets/analysis-worker/
 .analysis-build/
 analysis/**/__pycache__/
+
+.venv-analysis/

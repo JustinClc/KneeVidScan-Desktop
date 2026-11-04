@@ -131,8 +131,8 @@ Single package at repo root (`kneevidscan-desktop`):
 
 ## Local report analysis
 
-Reports now use an embedded offline analysis worker. Build the native worker
-before `pnpm start`, `package`, or `make`; see [analysis/README.md](analysis/README.md).
+Reports now use an embedded offline analysis worker. Development startup works without the worker; analysis and release packaging
+require a native worker build. See [analysis/README.md](analysis/README.md).
 The report and PDF share cached analysis results. Input failures offer correction
 or retake at the relevant assessment step. See [the design notes](docs/local-analysis-design.md)
 for the initial internal-build scoring behavior and validation status.
