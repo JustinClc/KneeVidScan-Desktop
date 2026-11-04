@@ -115,6 +115,8 @@ export function Subject() {
     setSubjectId,
     markStandingCaptured,
     resetStanding,
+    analysisRecovery,
+    setAnalysisRecovery,
     go,
     showToast,
   } = useSession();
@@ -128,12 +130,22 @@ export function Subject() {
   const frontalId = frontal?.deviceId;
 
   const [pstStep, setPstStep] = useState(() => {
+    if (analysisRecovery?.step === 4) {
+      const index = POSTURE_STEPS.findIndex(
+        (s) => s.code === analysisRecovery.field,
+      );
+      if (index >= 0) return index;
+    }
     const missing = POSTURE_STEPS.findIndex(
       (step) => !capturedStanding.includes(step.code),
     );
     return missing < 0 ? POSTURE_STEPS.length : missing;
   });
-  const [retakingCode, setRetakingCode] = useState<StandingCode | null>(null);
+  const [retakingCode, setRetakingCode] = useState<StandingCode | null>(
+    analysisRecovery?.step === 4
+      ? ((analysisRecovery.field as StandingCode) ?? null)
+      : null,
+  );
   const [phase, setPhaseState] = useState<Phase>('live');
   const [count, setCount] = useState(COUNTDOWN_SECONDS);
   const [quality, setQuality] = useState<PoseQuality>(EMPTY_QUALITY);
@@ -569,7 +581,10 @@ export function Subject() {
     }
     if (postureSavedById[subjectId]) {
       showToast(t(FACE_FRONTAL_AGAIN));
-      go(5);
+      if (analysisRecovery?.step === 4) {
+        setAnalysisRecovery(null);
+        go(8);
+      } else go(5);
       return;
     }
     setSaving(true);
@@ -599,7 +614,10 @@ export function Subject() {
       markPostureSaved(subjectId);
       showToast(formatPostureSaveToast(result));
       showToast(t(FACE_FRONTAL_AGAIN));
-      go(5);
+      if (analysisRecovery?.step === 4) {
+        setAnalysisRecovery(null);
+        go(8);
+      } else go(5);
     } catch (error) {
       showToast(
         t('Could not save the subject folder: {detail}', {

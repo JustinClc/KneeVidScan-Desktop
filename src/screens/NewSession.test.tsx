@@ -1,3 +1,4 @@
+import { backendClient } from '../lib/backendClient';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NewSession } from './NewSession';
@@ -16,14 +17,43 @@ function State() {
         height: state.heightCm,
         weight: state.weightKg,
         id: state.subjectId,
+        trials: state.trialRecords,
       })}
     </output>
+  );
+}
+function RecoverySetup() {
+  const state = useSession();
+  return (
+    <button
+      onClick={() => {
+        state.setSubjectId('P001');
+        state.setSubjectName('');
+        state.setSubjectFolder('P001', '/tmp/existing-assessment');
+        state.recordTrial({
+          id: 'trial-1',
+          name: 'sts01',
+          startAtMs: 1,
+          stoppedAt: 2,
+          durationSec: 20,
+        });
+        state.setAnalysisRecovery({
+          ok: false,
+          code: 'questionnaire',
+          step: 1,
+          field: 'weight',
+        });
+      }}
+    >
+      Prepare recovery
+    </button>
   );
 }
 function setup() {
   render(
     <SessionProvider>
       <NewSession />
+      <RecoverySetup />
       <State />
     </SessionProvider>,
   );
@@ -50,6 +80,41 @@ describe('intake questionnaire', () => {
         folder: '/tmp/2026-11-04_P001',
       })),
     };
+  });
+  it('corrects questionnaire in place without discarding saved captures or trials', async () => {
+    setup();
+    fill();
+    fireEvent.click(screen.getByText('Prepare recovery'));
+    const update = vi.spyOn(backendClient, 'upsertSubject').mockResolvedValue({
+      subject_id: 'P001',
+      subject_name: '',
+      height_cm: '172',
+      weight_kg: '72',
+    });
+    const write = vi.fn(async () => ({
+      ok: true,
+      folder: '/tmp/existing-assessment',
+      written: [],
+    }));
+    window.motuscapLite!.writeSaveFiles = write;
+    fireEvent.change(screen.getByLabelText('Weight (kg)'), {
+      target: { value: '72' },
+    });
+    expect(screen.getByLabelText('Name/SID')).toHaveAttribute('readonly');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('questionnaire-submit'));
+    });
+    expect(window.motuscapLite!.saveQuestionnaire).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledWith(
+      '/tmp/existing-assessment',
+      expect.arrayContaining([
+        expect.objectContaining({ filename: 'questionnaire.json' }),
+        expect.objectContaining({ filename: 'P001__subject.csv' }),
+      ]),
+    );
+    expect(screen.getByTestId('state')).toHaveTextContent('sts01');
+    expect(screen.getByTestId('state')).toHaveTextContent('"screen":8');
+    update.mockRestore();
   });
   it('requires every answer except phone and preserves zero pain on submit', async () => {
     setup();

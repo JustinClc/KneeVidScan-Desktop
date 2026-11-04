@@ -1,3 +1,4 @@
+import type { AnalysisResponse } from '../lib/analysis';
 import {
   createContext,
   useCallback,
@@ -82,6 +83,7 @@ export type SessionTrial = {
 };
 
 export type SessionState = {
+  analysisRecovery: Extract<AnalysisResponse, { ok: false }> | null;
   screen: ScreenId;
   pairingReturnScreen: Exclude<ScreenId, 2>;
   /** Home leads to the capture and recording step rail. */
@@ -140,6 +142,9 @@ export type SessionState = {
 };
 
 type SessionActions = {
+  setAnalysisRecovery: (
+    value: Extract<AnalysisResponse, { ok: false }> | null,
+  ) => void;
   go: (screen: ScreenId) => void;
   openCameraPairing: () => void;
   closeCameraPairing: () => void;
@@ -292,6 +297,7 @@ const initial: SessionState = {
   postureDone: false,
   capturedStanding: [],
   standingFiles: {},
+  analysisRecovery: null,
   trialName: 'gait01',
   trials: [],
   trialRecords: [],
@@ -724,6 +730,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           connectedImus: on ? [...IMU_SLOT_IDS] : [],
           hasImus: on,
         }),
+      setAnalysisRecovery: (analysisRecovery) => patch({ analysisRecovery }),
       setSubjectId: (subjectId) => patch({ subjectId }),
       setSubjectName: (subjectName) => patch({ subjectName }),
       setHeightCm: (heightCm) => patch({ heightCm }),

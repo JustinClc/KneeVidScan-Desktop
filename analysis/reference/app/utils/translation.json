@@ -1,0 +1,306 @@
+{
+  "en": {
+    "questionnaire": {
+      "Age": "Age",
+      "Sex": "Sex",
+      "Height": "Height (m)",
+      "Weight": "Weight (kg)",
+      "Smoking_habit": "Smoking habit",
+      "Activity_level": "Work activity level",
+      "activity_level_options": {
+        "mostly_sit": "Mostly sit",
+        "sit_stand": "Sit and stand/walk",
+        "mostly_stand": "Mostly stand/walk",
+        "lift_less_than_50lbs": "Deal with loads of < 50 lbs",
+        "lift_more_than_50lbs": "Deal with loads of > 50 lbs"
+      },
+      "Diabetes_history": "Diabetes history",
+      "Knee_injury": "History of knee injury affecting mobility for more than 2 weeks",
+      "Knee_surgery": "History of knee surgery",
+      "Crepitus": "Persistent clicking sound in the knee",
+      "VAS": "Degree of knee pain within the recent month (0: no pain, 10: the most painful)",
+      "Walking_aid": "Use of walking aid"
+    },
+    "feature": {
+      "Age": "Age",
+      "Sex": "Sex",
+      "Smoking_habit": "Smoking habit",
+      "Activity_level": "Work activity level",
+      "Diabetes_history": "Diabetes history",
+      "Knee_injury": "Knee injury history",
+      "Knee_surgery": "Knee surgery history",
+      "Crepitus": "Knee clicking sound",
+      "VAS": "Knee pain level",
+      "Walking_aid": "Use of walking aid",
+      "Knee_align_ang_R": "HKA angle (right)",
+      "Knee_align_ang_L": "HKA angle (left)",
+      "Knee_flexcon_hyperextension_R": "Knee extension/flexion angle (right)",
+      "Knee_flexcon_hyperextension_L": "Knee extension/flexion angle (left)",
+      "STS5_pace": "Sit-to-stand speed",
+      "SingleSTS_1: Stands without using arms": "Stands without arms",
+      "SingleSTS_2: Stands using arms": "Stands using arms",
+      "SingleSTS_3: Attempted, unable to stand": "Tried but unable to stand",
+      "SingleSTS_4: Not attempted, unable": "Unable, not attempted",
+      "sts_max_trunk_ang": "Max trunk flexion angle during sit-to-stand",
+      "sts_max_knee_ang_vel": "Max knee angular velocity during sit-to-stand",
+      "sts_max_trunk_ang_vel": "Max trunk angular velocity during sit-to-stand",
+      "sts_muscle_power": "Sit-to-stand muscle power",
+      "sts_trunk_flexion_ang_series": "Sit-to-stand trunk flexion angle curve",
+      "sts_trunk_flexion_ang_mean": "Mean sit-to-stand trunk flexion angle",
+      "sts_trunk_flexion_ang_error": "Sit-to-stand trunk flexion angle error range",
+      "sts_trunk_flexion_angvel_series": "Sit-to-stand trunk flexion velocity curve",
+      "gait_speed": "Gait speed",
+      "gait_cadence": "Gait cadence",
+      "gait_step_time_right": "Right step length",
+      "gait_step_time_left": "Left step length",
+      "gait_step_time_irregularity": "Step length irregularity",
+      "gait_asymmetry": "Gait symmetry",
+      "gait_lateral_trunk_sway": "Lateral trunk sway",
+      "gait_max_knee_adduction_angle_left": "Max left knee flexion angle",
+      "gait_max_knee_adduction_angle_right": "Max right knee flexion angle"
+    },
+    "Risk Score": "Knee OA risk score",
+    "risk_level": {
+      "risk_level_intro_text": "Your current knee OA risk is: ",
+      "risk_level_low": "Low risk (score: 0-23). No clear OA signs. Keep active and maintain good exercise habits.",
+      "risk_level_medium": "Medium risk (score: 23-60). Some OA signs or risks are present. Exercise and training may help slow degeneration.",
+      "risk_level_high": "High risk (score: 60-100). Clear OA signs are present. Consult a healthcare professional for further assessment and advice."
+    },
+    "advice": {
+      "fallback": "No clear knee OA risk factors were detected. Maintain healthy habits, a healthy weight, and regular physical activity to reduce knee OA risk."
+    },
+    "BMI": {
+      "BMI_high": "Excess weight adds knee load and may speed degeneration. Weight management is recommended.",
+      "BMI_low": "Low body weight may relate to weak muscles. Improve nutrition and leg strength."
+    },
+    "diabetes_history": "Diabetes is linked to higher knee OA risk. Blood sugar control and regular exercise may help.",
+    "smoking_habit": "Smoking may slow joint tissue repair. Reducing smoking may lower knee OA risk.",
+    "knee_injury": "A previous knee injury is linked to a higher risk of joint degeneration. Regular checkups are recommended to prevent further knee damage.",
+    "knee_surgery": "Previous knee surgery is linked to a higher risk of joint degeneration. Regular checkups are recommended to prevent further knee damage.",
+    "knee_pain": "Pain may be related to abnormal loading or damage in the knee. If pain persists, seek professional care to address the symptoms and avoid a rapid loss of mobility.",
+    "crepitus": "Persistent joint clicking may be related to soft-tissue inflammation or damage. If it continues, further medical imaging is recommended to confirm the cause.",
+    "knee_angle": {
+      "flexion_contracture": "You may have a flexion contracture on the {side} knee, which may cause abnormal joint loading. Stretching or a clinically validated brace is suggested under professional guidance.",
+      "hyperextension": "You may have hyperextension on the {side} knee, which may cause abnormal joint loading. Posture training or a clinically validated brace is suggested under professional guidance.",
+      "varus": "You may have a varus knee on the {side} knee, with abnormal medial joint stress and possible deformity. Strengthening or a clinical-grade brace is suggested under clinician guidance.",
+      "valgus": "You may have a valgus knee on the {side} knee, with abnormal lateral joint stress and possible deformity. Strengthening or a clinical-grade brace is suggested under clinician guidance.",
+      "side": {
+        "left": "left",
+        "right": "right"
+      }
+    },
+    "alignment": {
+      "varus": "More load may be placed on the inner knee, raising medial soft tissue risk.",
+      "valgus": "More load may be placed on the outer knee, raising lateral soft tissue risk.",
+      "flexion_contracture": "Limited knee extension may affect gait. Stretching and rehab are recommended.",
+      "hyperextension": "Knee hyperextension may affect stability. Strengthen leg muscles and avoid locking the knee."
+    },
+    "motion_function": {
+      "sts_function": "Sit-to-stand results suggest weak leg strength. Progressive strength, balance, and functional training are recommended.",
+      "gait_function": "Walking results suggest slower speed or poorer balance. Gait, balance, and leg strength training are recommended."
+    }
+  },
+  "zh-TW": {
+    "questionnaire":{
+      "Age": "年齡",
+      "Sex": "性別",
+      "Height": "身高 (m)",
+      "Weight": "體重 (kg)",
+      "Smoking_habit": "吸煙習慣",
+      "Activity_level": "日常活動水平",
+      "activity_level_options": {
+        "mostly_sit": "多數時間坐",
+        "sit_stand": "坐與站/行走時間大致相同",
+        "mostly_stand": "多數時間站立/行走",
+        "lift_less_than_50lbs": "需要提舉物品 < 50磅",
+        "lift_more_than_50lbs": "需要提舉物品 > 50磅"
+      },
+      "Diabetes_history": "糖尿病病史",
+      "Knee_injury": "膝關節曾受傷，並影響活動能力超過 2 星期",
+      "Knee_surgery": "曾接受膝關節手術",
+      "Crepitus": "膝關節持續有摩擦聲出現 (如喀喀聲)",
+      "VAS": "近一個月內膝關節疼痛程度 (0無痛 10最痛)", 
+      "Walking_aid": "需使用步行輔助用具"
+    },
+    "feature":{
+      "Age": "年齡",
+      "Sex": "性別",
+      "Smoking_habit": "吸煙習慣",
+      "Activity_level": "日常活動水平",
+      "Diabetes_history": "糖尿病病史",
+      "Knee_injury": "膝關節曾受傷",
+      "Knee_surgery": "膝關節曾接受手術",
+      "Crepitus": "膝關節摩擦聲",
+      "VAS": "膝關節疼痛程度",
+      "Walking_aid": "需使用步行輔助用具",
+      "Knee_align_ang_R": "髖-膝-踝角度（右）",
+      "Knee_align_ang_L": "髖-膝-踝角度（左）",
+      "Knee_flexcon_hyperextension_R": "膝關節過度伸展或屈曲攣縮角度（右）",
+      "Knee_flexcon_hyperextension_L": "膝關節過度伸展或屈曲攣縮角度（左）",
+      "STS5_pace": "坐站動作速度",
+      "SingleSTS_1: Stands without using arms": "坐站：不使用手臂即可站起",
+      "SingleSTS_2: Stands using arms": "坐站：需使用手臂站起",
+      "SingleSTS_3: Attempted, unable to stand": "坐站：嘗試但無法站起",
+      "SingleSTS_4: Not attempted, unable": "坐站：未嘗試，無法站起",
+      "sts_max_trunk_ang": "坐站最大軀幹屈曲角度",
+      "sts_max_knee_ang_vel": "坐站最大膝關節角速度",
+      "sts_max_trunk_ang_vel": "坐站最大軀幹角速度",
+      "sts_muscle_power": "坐站肌力功率",
+      "sts_trunk_flexion_ang_series": "坐站軀幹屈曲角度時間序列曲線",
+      "sts_trunk_flexion_ang_mean": "坐站軀幹屈曲角度平均值",
+      "sts_trunk_flexion_ang_error": "坐站軀幹屈曲角度誤差範圍",
+      "sts_trunk_flexion_angvel_series": "坐站軀幹屈曲角度速度時間序列曲線",
+      "gait_speed": "步行速度",
+      "gait_cadence": "步行節奏",
+      "gait_step_time_right": "右腳步長",
+      "gait_step_time_left": "左腳步長",
+      "gait_step_time_irregularity": "步長不規則程度",
+      "gait_asymmetry": "步態對稱性",
+      "gait_lateral_trunk_sway": "側向軀幹晃動",
+      "gait_max_knee_adduction_angle_left": "左膝最大屈曲角度",
+      "gait_max_knee_adduction_angle_right": "右膝最大屈曲角度"
+    },
+    "Risk Score": "膝關節炎風險評分",
+    "risk_level": {
+      "risk_level_intro_text": "您的評估結果顯示目前的膝關節炎風險屬於: ",
+      "risk_level_low": "低風險（分數：0–23）目前未見明顯膝關節炎徵象。建議持續維持良好活動量與訓練習慣，有助保持膝關節健康。",
+      "risk_level_medium": "中風險（分數：23–60）目前有出現膝關節炎徵象或風險，建議進行適當運動與訓練，以減緩退化速度。",
+      "risk_level_high": "高風險（分數：60–100）：目前已有明顯膝關節炎徵象，建議及早諮詢專業醫療人員，安排進一步檢查，並取得適合的護理與改善建議。"
+    },
+    "advice": {
+      "fallback": "目前沒有檢測到明顯膝關節炎風險因子, 建議可以維持現時健康生活習慣、保持標準體重及日常運動量，以減低膝關節炎風險。"
+    },
+    "BMI":{  
+      "BMI_high": "體重過高會增加膝關節負擔，可能加速膝關節退化。建議進行體重管理，逐步減輕膝蓋壓力。",
+      "BMI_low": "體重過低可能與肌力不足相關。建議補充適當營養並進行下肢肌力訓練。"
+    },
+    "diabetes_history": "糖尿病與較高的膝關節炎風險相關。保持良好血糖控制與規律運動可減少關節發炎幾率。",
+    "smoking_habit": "吸煙可能影響關節組織的修復能力。適度減少有助降低膝關節炎風險。",
+    "knee_injury": "膝關節曾經受傷與較高關節退化風險相關。建議定期進行檢查防止膝關節進一步受損。",
+    "knee_surgery": "膝關節曾經接受手術與較高關節退化風險相關。建議定期進行檢查防止膝關節進一步受損。",
+    "knee_pain": "疼痛可能與膝關節不正常受壓或受損有關，如果疼痛持續，建議尋找專業人士處理症狀，以免活動能力急速下降。",
+    "crepitus": "關節持續有摩擦聲可能與軟組織發炎或受損有關，如果情況持續建議作進一步醫學影像檢查確認成因。",
+    "knee_angle": {
+      "flexion_contracture": "{side}膝可能有屈曲攣縮，或會造成關節異常受力。建議在專業人員指導下進行伸展，或使用經臨床驗證的護具。",
+      "hyperextension": "{side}膝可能有過度伸展，或會造成關節異常受力。建議在專業人員指導下進行姿勢訓練，或使用經臨床驗證的護具。",
+      "varus": "{side}膝可能有內翻，內側關節壓力異常，並可能出現結構變形。建議在臨床人員指導下進行肌力訓練，或配戴臨床級護膝。",
+      "valgus": "{side}膝可能有外翻，外側關節壓力異常，並可能出現結構變形。建議在臨床人員指導下進行肌力訓練，或配戴臨床級護膝。",
+      "side": {
+        "left": "左",
+        "right": "右"
+      }
+    },
+    "alignment":{
+      "varus": "顯示膝關節內側的受力可能較大，可能增加內側軟組織損壞風險。",
+      "valgus": "顯示膝關節外側的受力可能較大，可能增加外側軟組織損壞風險。",
+      "flexion_contracture": "膝關節無法完全伸直可能影響步態，建議進行伸展與復健訓練。",
+      "hyperextension": "膝關節過度伸展可能影響穩定性，建議加強腿部肌力並避免膝蓋鎖死。"
+    },
+    "motion_function":{
+      "sts_function": "坐站測試結果顯示下肢肌力可能不足，建議進行漸進式腿部肌力訓練，並搭配平衡與功能性訓練。",
+      "gait_function": "步行測試顯示行走速度或平衡可能較差，建議進行步態、平衡及下肢肌力訓練，以提升行走穩定性。"
+    }
+  },
+  "zh-CN": {
+    "questionnaire": {
+      "Age": "年龄",
+      "Sex": "性别",
+      "Height": "身高 (m)",
+      "Weight": "体重 (kg)",
+      "Smoking_habit": "吸烟习惯",
+      "Activity_level": "日常活动水平",
+      "activity_level_options": {
+        "mostly_sit": "多数时间坐着",
+        "sit_stand": "坐着与站立/行走时间大致相同",
+        "mostly_stand": "多数时间站立/行走",
+        "lift_less_than_50lbs": "需要提举物品 < 50 磅",
+        "lift_more_than_50lbs": "需要提举物品 > 50 磅"
+      },
+      "Diabetes_history": "糖尿病病史",
+      "Knee_injury": "膝关节曾受伤，并影响活动能力超过 2 星期",
+      "Knee_surgery": "曾接受膝关节手术",
+      "Crepitus": "膝关节持续出现摩擦声（如咔咔声）",
+      "VAS": "近一个月内膝关节疼痛程度 (0无痛，10最痛)",
+      "Walking_aid": "需要使用步行辅助用具"
+    },
+    "feature": {
+      "Age": "年龄",
+      "Sex": "性别",
+      "Smoking_habit": "吸烟习惯",
+      "Activity_level": "日常活动水平",
+      "Diabetes_history": "糖尿病病史",
+      "Knee_injury": "膝关节曾受伤",
+      "Knee_surgery": "膝关节曾接受手术",
+      "Crepitus": "膝关节摩擦声",
+      "VAS": "膝关节疼痛程度",
+      "Walking_aid": "需要使用步行辅助用具",
+      "Knee_align_ang_R": "髋-膝-踝角度 (右)",
+      "Knee_align_ang_L": "髋-膝-踝角度 (左)",
+      "Knee_flexcon_hyperextension_R": "膝关节过度伸展或屈曲挛缩角度 (右)",
+      "Knee_flexcon_hyperextension_L": "膝关节过度伸展或屈曲挛缩角度 (左)",
+      "STS5_pace": "坐站动作速度",
+      "SingleSTS_1: Stands without using arms": "坐站：不使用手臂即可站起",
+      "SingleSTS_2: Stands using arms": "坐站：需使用手臂站起",
+      "SingleSTS_3: Attempted, unable to stand": "坐站：尝试但无法站起",
+      "SingleSTS_4: Not attempted, unable": "坐站：未尝试，无法站起",
+      "sts_max_trunk_ang": "坐站最大躯干屈曲角度",
+      "sts_max_knee_ang_vel": "坐站最大膝关节角速度",
+      "sts_max_trunk_ang_vel": "坐站最大躯干角速度",
+      "sts_muscle_power": "坐站肌力功率",
+      "sts_trunk_flexion_ang_series": "坐站躯干屈曲角度时间序列曲线",
+      "sts_trunk_flexion_ang_mean": "坐站躯干屈曲角度平均值",
+      "sts_trunk_flexion_ang_error": "坐站躯干屈曲角度误差范围",
+      "sts_trunk_flexion_angvel_series": "坐站躯干屈曲角速度时间序列曲线",
+      "gait_speed": "步行速度",
+      "gait_cadence": "步行节奏",
+      "gait_step_time_right": "右脚步长",
+      "gait_step_time_left": "左脚步长",
+      "gait_step_time_irregularity": "步长不规则程度",
+      "gait_asymmetry": "步态对称性",
+      "gait_lateral_trunk_sway": "侧向躯干晃动",
+      "gait_max_knee_adduction_angle_left": "左膝最大屈曲角度",
+      "gait_max_knee_adduction_angle_right": "右膝最大屈曲角度"
+    },
+    "Risk Score": "膝关节炎风险评分",
+    "risk_level": {
+      "risk_level_intro_text": "您的评估结果显示目前的膝关节炎风险属于：",
+      "risk_level_low": "低风险（分数：0-23）目前未见明显膝关节炎征象。建议持续维持良好活动量与训练习惯，有助保持膝关节健康。",
+      "risk_level_medium": "中风险（分数：23-60）目前有出现膝关节炎征象或风险，建议进行适当运动与训练，以减缓退化速度。",
+      "risk_level_high": "高风险（分数：60-100）：目前已有明显膝关节炎征象，建议及早咨询专业医疗人员，安排进一步检查，并取得适合的护理与改善建议。"
+    },
+    "advice": {
+      "fallback": "目前没有检测到明显膝关节炎风险因子，建议可以维持现时健康生活习惯、保持标准体重及日常运动量，以减低膝关节炎风险。"
+    },
+    "BMI": {
+      "BMI_high": "体重过高会增加膝关节负担，可能加速膝关节退化。建议进行体重管理，逐步减轻膝盖压力。",
+      "BMI_low": "体重过低可能与肌力不足相关。建议补充适当营养并进行下肢肌力训练。"
+    },
+    "diabetes_history": "糖尿病与较高的膝关节炎风险相关。保持良好血糖控制与规律运动可减少关节发炎几率。",
+    "smoking_habit": "吸烟习惯可能影响关节组织的修复能力。适度减少有助降低膝关节炎风险。",
+    "knee_injury": "膝关节曾经受伤与较高关节退化风险相关。建议定期进行检查防止膝关节进一步受损。",
+    "knee_surgery": "膝关节曾经接受手术与较高关节退化风险相关。建议定期进行检查防止膝关节进一步受损。",
+    "knee_pain": "疼痛可能与膝关节不正常受压或受损有关，如果疼痛持续，建议寻找专业人士处理症状，以免活动能力急速下降。",
+    "crepitus": "关节持续有摩擦声可能与软组织发炎或受损有关，如果情况持续建议作进一步医学影像检查确认成因。",
+    "knee_angle": {
+      "flexion_contracture": "{side}膝可能有屈曲挛缩，或会造成关节异常受力。建议在专业人员指导下进行伸展，或使用经临床验证的护具。",
+      "hyperextension": "{side}膝可能有过度伸展，或会造成关节异常受力。建议在专业人员指导下进行姿势训练，或使用经临床验证的护具。",
+      "varus": "{side}膝可能有内翻，内侧关节压力异常，并可能出现结构变形。建议在临床人员指导下进行肌力训练，或配戴临床级护膝。",
+      "valgus": "{side}膝可能有外翻，外侧关节压力异常，并可能出现结构变形。建议在临床人员指导下进行肌力训练，或配戴临床级护膝。",
+      "side": {
+        "left": "左",
+        "right": "右"
+      }
+    },
+    "alignment": {
+      "varus": "显示膝关节内侧的受力可能较大，可能增加内侧软组织损坏风险。",
+      "valgus": "显示膝关节外侧的受力可能较大，可能增加外侧软组织损坏风险。",
+      "flexion_contracture": "膝关节无法完全伸直可能影响步态，建议进行伸展训练。",
+      "hyperextension": "膝关节过度伸展可能影响稳定性，建议加强腿部肌力并避免膝盖锁死。"
+    },
+    "motion_function": {
+      "sts_function": "坐站测试结果显示下肢肌力可能不足，建议进行渐进式腿部肌力训练，并搭配平衡与功能性训练。",
+      "gait_function": "步行测试显示行走速度或平衡可能较差，建议进行步态、平衡及下肢肌力训练，以提升行走稳定性。"
+    }
+  }
+}
+

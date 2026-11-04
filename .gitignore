@@ -154,3 +154,8 @@ assets/ffmpeg/
 .DS_Store
 
 .DS_Store
+
+# Generated native offline analysis runtime
+assets/analysis-worker/
+.analysis-build/
+analysis/**/__pycache__/

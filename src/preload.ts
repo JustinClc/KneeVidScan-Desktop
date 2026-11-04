@@ -1,3 +1,4 @@
+import type { AnalysisInput, AnalysisResponse } from './lib/analysis';
 import { contextBridge, ipcRenderer } from 'electron';
 import type { QuestionnaireAnswers } from './lib/questionnaire';
 
@@ -66,6 +67,7 @@ export type ExportReportResult =
   | { ok: false; error: string };
 
 export type MotusCapLiteApi = {
+  analyzeAssessment?: (input: AnalysisInput) => Promise<AnalysisResponse>;
   exportReport?: (input: ExportReportInput) => Promise<ExportReportResult>;
   saveQuestionnaire?: (
     answers: QuestionnaireAnswers,
@@ -97,6 +99,7 @@ export type MotusCapLiteApi = {
 };
 
 const api: MotusCapLiteApi = {
+  analyzeAssessment: (input) => ipcRenderer.invoke('analysis:run', input),
   exportReport: (input) => ipcRenderer.invoke('report:export', input),
   saveQuestionnaire: (answers, title, buttonLabel) =>
     ipcRenderer.invoke('save:questionnaire', answers, title, buttonLabel),

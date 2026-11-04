@@ -1,3 +1,5 @@
+import { createAnalysisService } from './backend/analysis';
+import type { AnalysisInput } from './lib/analysis';
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { statSync } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -132,6 +134,36 @@ async function chooseDirectory(
 }
 
 app.whenReady().then(async () => {
+  const analysisRoot = path.join(
+    app.isPackaged
+      ? process.resourcesPath
+      : path.join(app.getAppPath(), 'assets'),
+    'analysis-worker',
+  );
+  let fingerprint = 'unavailable';
+  try {
+    fingerprint = await fs.readFile(
+      path.join(analysisRoot, 'manifest.json'),
+      'utf8',
+    );
+  } catch {
+    /* Handler returns a retryable runtime failure. */
+  }
+  const analyze = createAnalysisService({
+    executable: path.join(
+      analysisRoot,
+      'kneevid-analysis',
+      process.platform === 'win32'
+        ? 'kneevid-analysis.exe'
+        : 'kneevid-analysis',
+    ),
+    fingerprint,
+  });
+  ipcMain.handle('analysis:run', async (event, input: AnalysisInput) => {
+    if (event.sender !== mainWindow?.webContents)
+      return { ok: false, code: 'runtime', step: 7 };
+    return analyze(input);
+  });
   ipcMain.handle('report:export', async (_event, input: ExportReportInput) =>
     exportReportPdf(input, {
       createWindow: () => {

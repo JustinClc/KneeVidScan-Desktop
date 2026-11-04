@@ -1,3 +1,5 @@
+import { verifyAnalysisBundle } from './src/backend/analysisBundle';
+import path from 'node:path';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
@@ -15,7 +17,17 @@ const config: ForgeConfig = {
     icon: 'assets/branding/kneevidscan',
     // Offline MediaPipe WASM + pose model, served by the local backend.
     // ffmpeg turns WebM phone uploads into H.264 MP4.
-    extraResource: ['assets/mediapipe', 'assets/ffmpeg', 'assets/branding'],
+    extraResource: [
+      'assets/mediapipe',
+      'assets/ffmpeg',
+      'assets/branding',
+      'assets/analysis-worker',
+    ],
+    afterCopy: [
+      async ({ platform, arch }) => {
+        verifyAnalysisBundle(path.resolve('.'), platform, arch);
+      },
+    ],
   },
   rebuildConfig: {},
   makers: [

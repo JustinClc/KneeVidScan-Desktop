@@ -383,6 +383,22 @@ describe('KneeVidScan-Desktop Phase 1 shell', () => {
   beforeEach(() => {
     resetMock();
     window.motuscapLite = {
+      analyzeAssessment: async () => ({
+        ok: true as const,
+        result: {
+          version: 'test',
+          risk: 62.34,
+          mobility: 71,
+          alignmentLeft: 1,
+          alignmentRight: 2,
+          extensionLeft: 3,
+          extensionRight: 4,
+          riskText: 'Assessment risk text',
+          advice: ['Advice'],
+          videoMeasurements: { STS5_pace: 20 },
+          featureImportance: {},
+        },
+      }),
       saveQuestionnaire: async () => ({
         ok: true as const,
         folder: '/tmp/motuscap-lite-save',
@@ -1530,7 +1546,12 @@ describe('KneeVidScan-Desktop Phase 1 shell', () => {
     await waitFor(() =>
       expect(screen.getByTestId('screen-final-report')).toBeInTheDocument(),
     );
-    expect(screen.getByTestId('assessment-report')).toHaveTextContent(
+    await waitFor(() =>
+      expect(screen.getByTestId('assessment-report')).toHaveTextContent(
+        '62.34',
+      ),
+    );
+    expect(screen.getByTestId('assessment-report')).not.toHaveTextContent(
       'Example results',
     );
     expect(write.mock.calls.map(([folder]) => folder)).toEqual([
