@@ -11,14 +11,37 @@ Use Python **3.9**, matching the API's pinned model dependencies. On Linux insta
 (Apple Silicon or Intel), and Linux must each use a native runtime of the same
 architecture as the Electron package; PyInstaller is not a cross compiler.
 
-From the repository root:
+From the repository root, create and activate an isolated Python 3.9 environment.
+If you have Conda (including Anaconda/Miniconda), use:
 
 ```sh
-python -m pip install -r analysis/requirements-build.txt
-python -m unittest discover -s analysis/tests -v
-python analysis/build_worker.py
-node scripts/ensure-analysis.mjs
-pnpm install --frozen-lockfile
+conda create --prefix ./.venv-analysis python=3.9 pip -y &&
+conda activate ./.venv-analysis
+```
+
+Otherwise, install Python 3.9 first, then use:
+
+```sh
+python3.9 -m venv .venv-analysis &&
+source .venv-analysis/bin/activate
+```
+
+On Windows, use `py -3.9 -m venv .venv-analysis` and activate with
+`.venv-analysis\Scripts\Activate.ps1` in PowerShell.
+
+Confirm `python --version` reports **3.9.x** before continuing. If environment
+creation or activation fails, stop there: running pip in your existing environment
+(especially a newer Python) cannot install these pinned dependencies. Keep the
+pins to preserve compatibility with the reference model.
+
+Then install and build (the `&&` operators stop after a failed step):
+
+```sh
+python -m pip install -r analysis/requirements-build.txt &&
+python -m unittest discover -s analysis/tests -v &&
+python analysis/build_worker.py &&
+node scripts/ensure-analysis.mjs &&
+pnpm install --frozen-lockfile &&
 pnpm start
 ```
 

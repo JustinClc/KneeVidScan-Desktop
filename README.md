@@ -17,6 +17,9 @@ Desktop motion-capture operator app (Electron): connect 1–3 USB/computer camer
 
 - Node.js 20+ (22 recommended)
 - [pnpm](https://pnpm.io/) 10+
+- Python **3.9** to build the offline analysis worker for development; follow
+  [analysis/README.md](analysis/README.md) before running `pnpm start` for the first time.
+  Packaged releases include the worker and do not require Python.
 
 ## Install
 

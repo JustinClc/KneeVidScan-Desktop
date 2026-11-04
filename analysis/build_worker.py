@@ -11,10 +11,13 @@ ANALYSIS = ROOT / 'analysis'
 OUT = ROOT / 'assets' / 'analysis-worker'
 
 def main():
+    if sys.version_info[:2] != (3, 9):
+        raise SystemExit(
+            f'Build requires Python 3.9; running {platform.python_version()} ({sys.executable}). '
+            'Create and activate a Python 3.9 environment first; see analysis/README.md.'
+        )
     import mediapipe as mp
     import PyInstaller.__main__
-    if sys.version_info[:2] != (3, 9):
-        raise SystemExit('Build the API model worker with Python 3.9, matching the reference environment.')
     # Fetch only at build time; failure blocks packaging rather than causing a runtime download.
     with mp.solutions.pose.Pose(static_image_mode=True, model_complexity=2):
         pass
