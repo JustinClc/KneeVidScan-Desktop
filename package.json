@@ -12,15 +12,17 @@
   "scripts": {
     "mediapipe:assets": "node scripts/fetch-mediapipe.mjs",
     "ffmpeg:assets": "node scripts/fetch-ffmpeg.mjs",
-    "start": "pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge start",
-    "package": "pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge package",
-    "make": "pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge make",
-    "make:win": "pnpm mediapipe:assets && node scripts/fetch-ffmpeg.mjs --platform=win32 --arch=x64 && electron-forge make --platform=win32",
-    "make:mac": "pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge make --platform=darwin",
+    "start": "node scripts/ensure-analysis.mjs && pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge start",
+    "package": "node scripts/ensure-analysis.mjs && pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge package",
+    "make": "node scripts/ensure-analysis.mjs && pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge make",
+    "make:win": "node scripts/ensure-analysis.mjs --platform=win32 --arch=x64 && pnpm mediapipe:assets && node scripts/fetch-ffmpeg.mjs --platform=win32 --arch=x64 && electron-forge make --platform=win32",
+    "make:mac": "node scripts/ensure-analysis.mjs --platform=darwin && pnpm mediapipe:assets && pnpm ffmpeg:assets && electron-forge make --platform=darwin",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint && oxfmt --check"
+    "lint": "oxlint && oxfmt --check",
+    "analysis:check": "node scripts/ensure-analysis.mjs",
+    "analysis:build": "python analysis/build_worker.py"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.1.1",

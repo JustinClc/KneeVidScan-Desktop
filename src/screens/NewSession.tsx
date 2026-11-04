@@ -1,5 +1,9 @@
+import { backendClient } from '../lib/backendClient';
+import { buildSubjectInfoCsv } from '../lib/sessionSave';
+import { subjectInfoFileName } from '../lib/naming';
+import { utf8ToBase64 } from '../lib/saveExport';
 import { CameraPairingButton } from '../components/CameraPairingButton';
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { t } from '../lib/locale';
 import { useLocale } from '../lib/useLocale';
 import {
@@ -14,6 +18,11 @@ import { useSession } from '../state/SessionContext';
 export function NewSession() {
   const {
     questionnaire: answers,
+    analysisRecovery,
+    setAnalysisRecovery,
+    subjectId,
+    subjectName,
+    subjectFolderById,
     setQuestionnaire,
     setQuestionnaireCompleted,
     setSubjectFolder,
@@ -32,6 +41,14 @@ export function NewSession() {
   const submitting = useRef(false);
   const update = (key: keyof QuestionnaireAnswers, value: string) =>
     setQuestionnaire({ ...answers, [key]: value });
+  useEffect(() => {
+    if (analysisRecovery?.step !== 1 || !analysisRecovery.field) return;
+    const field = analysisRecovery.field;
+    const input = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input'),
+    ).find((input) => input.name === field);
+    input?.focus();
+  }, [analysisRecovery]);
   const required = (
     <span className="questionnaire-required" aria-hidden="true">
       *
@@ -44,6 +61,42 @@ export function NewSession() {
     setSaving(true);
     setSaveError(null);
     try {
+      if (analysisRecovery?.step === 1 && subjectFolderById[subjectId]) {
+        const height = String(Math.round(Number(answers.height) * 10000) / 100);
+        await backendClient.upsertSubject({
+          subjectId,
+          subjectName,
+          heightCm: height,
+          weightKg: answers.weight,
+        });
+        const result = await window.motuscapLite!.writeSaveFiles(
+          subjectFolderById[subjectId],
+          [
+            {
+              filename: 'questionnaire.json',
+              base64: utf8ToBase64(JSON.stringify(answers, null, 2) + '\n'),
+            },
+            {
+              filename: subjectInfoFileName(subjectId, subjectName),
+              base64: utf8ToBase64(
+                buildSubjectInfoCsv({
+                  subjectId,
+                  subjectName,
+                  heightCm: height,
+                  weightKg: answers.weight,
+                }),
+              ),
+            },
+          ],
+        );
+        if (!result.ok) throw new Error(result.error);
+        setHeightCm(height);
+        setWeightKg(answers.weight);
+        setQuestionnaireCompleted(true);
+        setAnalysisRecovery(null);
+        go(8);
+        return;
+      }
       const save = window.motuscapLite?.saveQuestionnaire;
       if (!save)
         throw new Error(
@@ -93,6 +146,7 @@ export function NewSession() {
           aria-label={t(label)}
           type={key === 'phone' ? 'tel' : 'text'}
           required={key !== 'phone'}
+          readOnly={key === 'name' && analysisRecovery?.step === 1}
           value={answers[key]}
           placeholder={t(placeholder)}
           inputMode={

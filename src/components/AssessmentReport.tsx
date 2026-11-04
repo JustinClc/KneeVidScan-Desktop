@@ -1,3 +1,4 @@
+import type { AnalysisResult } from '../lib/analysis';
 import type { QuestionnaireAnswers } from '../lib/questionnaire';
 import type { Locale } from '../lib/locale';
 import type { StandingCode } from '../lib/naming';
@@ -6,6 +7,7 @@ import '../styles/report.css';
 
 export type ReportPhotos = Partial<Record<StandingCode, string>>;
 export type AssessmentReportProps = {
+  analysis: AnalysisResult;
   locale: Locale;
   subjectId: string;
   subjectName: string;
@@ -15,16 +17,6 @@ export type AssessmentReportProps = {
   date: string;
   photos: ReportPhotos;
 };
-
-// Temporary analysis output. Keep separate from the subject's real data.
-export const EXAMPLE_REPORT_METRICS = {
-  risk: 17.5,
-  mobility: 9,
-  alignmentLeft: 0.52,
-  alignmentRight: 6.64,
-  extensionLeft: 5.25,
-  extensionRight: 0.97,
-} as const;
 
 function Gauge({
   value,
@@ -110,7 +102,7 @@ function Gauge({
         fontWeight="750"
         fill={color}
       >
-        {value}
+        {Math.round(value * 100) / 100}
         {unit}
       </text>
     </svg>
@@ -129,7 +121,7 @@ export function AssessmentReport(props: AssessmentReportProps) {
     weightKg,
   } = props;
   const c = reportCopy(locale),
-    m = EXAMPLE_REPORT_METRICS;
+    m = props.analysis;
   const scoreStops = (a: number, b: number): Array<[number, string]> => [
     [0, '#125d9e'],
     [a, '#ffbd2c'],
@@ -186,7 +178,7 @@ export function AssessmentReport(props: AssessmentReportProps) {
           label={`${name} · ${extension ? c.extension : c.alignment}`}
           color={!extension && value > 4 ? '#ae6c00' : '#008548'}
         />
-        <p>{extension ? c.normalExtension : value > 4 ? c.varus : c.neutral}</p>
+        <p>{angleInterpretation(locale, value, extension)}</p>
       </div>
     </div>
   );
@@ -209,12 +201,16 @@ export function AssessmentReport(props: AssessmentReportProps) {
           </p>
           <h1>{c.title}</h1>
         </div>
-        <span className="report-example-badge">{c.example}</span>
       </header>
       <dl className="report-subject">
         {[
-          [c.subject, subjectName || questionnaire.name || '—'],
-          [c.id, subjectId],
+          [
+            c.nameId,
+            subjectName.trim() ||
+              questionnaire.name.trim() ||
+              subjectId.trim() ||
+              '—',
+          ],
           [c.date, date],
           [c.age, questionnaire.age || '—'],
           [c.sex, sex],
@@ -227,19 +223,21 @@ export function AssessmentReport(props: AssessmentReportProps) {
           </div>
         ))}
       </dl>
-      <p className="report-example-note">{c.exampleNote}</p>
+
       <div className="report-columns report-scores">
         <section className="report-card">
           <h2>{c.risk}</h2>
           <div className="report-score-content">
             <Gauge
               value={m.risk}
-              stops={scoreStops(23, 55)}
-              ticks={[0, 23, 55, 100]}
+              stops={scoreStops(23, 60)}
+              ticks={[0, 23, 60, 100]}
               label={c.risk}
             />
             <div className="report-score-copy">
-              <strong>{c.low}</strong>
+              <strong>
+                {m.risk < 23 ? c.low : m.risk < 60 ? c.moderate : c.high}
+              </strong>
               <p>{c.riskLow}</p>
               <p>{c.riskMid}</p>
               <p>{c.riskHigh}</p>
@@ -256,7 +254,13 @@ export function AssessmentReport(props: AssessmentReportProps) {
               label={c.mobility}
             />
             <div className="report-score-copy">
-              <strong>{c.good}</strong>
+              <strong>
+                {m.mobility < 30
+                  ? c.good
+                  : m.mobility < 60
+                    ? c.acceptable
+                    : c.improve}
+              </strong>
               <p>{c.mobilityLow}</p>
               <p>{c.mobilityMid}</p>
               <p>{c.mobilityHigh}</p>
@@ -280,11 +284,15 @@ export function AssessmentReport(props: AssessmentReportProps) {
       <section className="report-evaluation">
         <div>
           <h2>{c.overall}</h2>
-          <p>{c.overallText}</p>
+          <p>{m.riskText}</p>
         </div>
         <div>
           <h2>{c.recommendations}</h2>
-          <p>{c.recommendationText}</p>
+          <ul>
+            {m.advice.map((line, index) => (
+              <li key={index}>{line}</li>
+            ))}
+          </ul>
         </div>
       </section>
       <aside className="report-disclaimer">
@@ -293,4 +301,41 @@ export function AssessmentReport(props: AssessmentReportProps) {
       </aside>
     </article>
   );
+}
+
+function angleInterpretation(
+  locale: Locale,
+  value: number,
+  extension: boolean,
+): string {
+  const labels =
+    locale === 'en'
+      ? [
+          'Neutral alignment',
+          'Varus alignment',
+          'Valgus alignment',
+          'Normal knee extension',
+          'Flexion contracture',
+          'Hyperextension',
+        ]
+      : locale === 'zh-Hant'
+        ? [
+            '正常力線',
+            '膝內翻',
+            '膝外翻',
+            '正常膝伸展',
+            '屈曲攣縮',
+            '膝過度伸展',
+          ]
+        : [
+            '正常力线',
+            '膝内翻',
+            '膝外翻',
+            '正常膝伸展',
+            '屈曲挛缩',
+            '膝过度伸展',
+          ];
+  return extension
+    ? labels[value > 6.5 ? 4 : value < -6.5 ? 5 : 3]
+    : labels[value >= 4 ? 1 : value <= -4 ? 2 : 0];
 }

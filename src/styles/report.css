@@ -52,16 +52,6 @@
   margin-top: 9px;
   font-weight: 750;
 }
-.report-example-badge {
-  font-size: 11px;
-  font-weight: 650;
-  color: #8c5a0b;
-  border: 1px solid #efd599;
-  background: #fff8e9;
-  border-radius: 20px;
-  padding: 6px 11px;
-  flex-shrink: 0;
-}
 .report-subject {
   display: flex;
   flex-wrap: wrap;
@@ -80,11 +70,6 @@
   font-weight: 650;
   overflow-wrap: anywhere;
   max-width: 230px;
-}
-.report-example-note {
-  padding: 10px 0 14px;
-  font-size: 11px;
-  color: #86632c;
 }
 .report-columns {
   display: grid;
@@ -318,12 +303,6 @@
     font-size: 21px;
     margin-top: 6px;
   }
-  .report-example-badge {
-    max-width: 125px;
-    font-size: 8px;
-    padding: 5px 7px;
-    text-align: center;
-  }
   .report-subject {
     gap: 8px 19px;
     padding: 9px 16px;
@@ -334,10 +313,6 @@
   .report-subject dd {
     font-size: 9px;
     max-width: 140px;
-  }
-  .report-example-note {
-    font-size: 9px;
-    padding: 7px 0 10px;
   }
   .report-columns {
     gap: 12px;

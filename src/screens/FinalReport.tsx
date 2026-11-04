@@ -1,3 +1,8 @@
+import {
+  analysisCopy,
+  type AnalysisResponse,
+  type AnalysisResult,
+} from '../lib/analysis';
 import { useEffect, useRef, useState } from 'react';
 import {
   AssessmentReport,
@@ -9,6 +14,8 @@ import {
   STANDING_SEQUENCE,
   standingFileName,
   subjectBase,
+  trialFolderSlug,
+  recordingVideoFileName,
 } from '../lib/naming';
 import { reportCopy } from '../lib/reportCopy';
 
@@ -26,8 +33,19 @@ export function FinalReport() {
     subjectFolderById,
     sessionEpoch,
     trialRecords,
+    trialName,
+    camCount,
+    setAnalysisRecovery,
   } = useSession();
   const c = reportCopy(locale);
+  const ac = analysisCopy(locale);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysisFailure, setAnalysisFailure] = useState<Extract<
+    AnalysisResponse,
+    { ok: false }
+  > | null>(null);
+  const [analyzing, setAnalyzing] = useState(true);
+  const [analysisRetry, setAnalysisRetry] = useState(0);
   const folder = subjectFolderById[subjectId];
   const [photos, setPhotos] = useState<ReportPhotos>({});
   const [loading, setLoading] = useState(true);
@@ -72,8 +90,55 @@ export function FinalReport() {
     };
   }, [folder, subjectId, subjectName, reload]);
 
+  useEffect(() => {
+    let active = true;
+    setAnalyzing(true);
+    setAnalysis(null);
+    setAnalysisFailure(null);
+    setSavedPath('');
+    const trial =
+      [...trialRecords].reverse().find((t) => t.name === trialName) ??
+      trialRecords.at(-1);
+    const videos = trial
+      ? Array.from(
+          { length: camCount },
+          (_, index) =>
+            `${trialFolderSlug(trial.name)}/${recordingVideoFileName(subjectId, subjectName, trial.name, camCount, index)}`,
+        )
+      : [];
+    const run = window.motuscapLite?.analyzeAssessment;
+    const request =
+      run && folder
+        ? run({ folder, subjectId, subjectName, questionnaire, locale, videos })
+        : Promise.resolve({ ok: false, code: 'runtime', step: 7 } as const);
+    void request
+      .catch(() => ({ ok: false, code: 'runtime', step: 7 }) as const)
+      .then((response) => {
+        if (!active) return;
+        if (response.ok) {
+          setAnalysis(response.result);
+          setAnalysisRecovery(null);
+        } else setAnalysisFailure(response);
+        setAnalyzing(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    folder,
+    subjectId,
+    subjectName,
+    questionnaire,
+    locale,
+    trialRecords,
+    trialName,
+    camCount,
+    analysisRetry,
+  ]);
+
   const props = {
     locale,
+    analysis: analysis!,
     subjectId,
     subjectName,
     heightCm,
@@ -85,7 +150,7 @@ export function FinalReport() {
     ),
   };
   const exportPdf = async () => {
-    if (busy.current) return;
+    if (busy.current || !analysis || analyzing || analysisFailure) return;
     if (!folder) {
       setError(c.missingFolder);
       return;
@@ -171,7 +236,41 @@ export function FinalReport() {
             </button>
           ) : null}
         </div>
-        <AssessmentReport {...props} />
+        {analyzing ? (
+          <p role="status">{ac.running}</p>
+        ) : analysisFailure ? (
+          <div
+            role="alert"
+            className="report-saved-path"
+            data-testid="analysis-failure"
+          >
+            <p>
+              {ac[analysisFailure.code]} {analysisFailure.field ?? ''}
+            </p>
+            {analysisFailure.code !== 'runtime' && (
+              <button
+                className="btn btn-primary"
+                type="button"
+                data-testid="analysis-correct"
+                onClick={() => {
+                  setAnalysisRecovery(analysisFailure);
+                  go(analysisFailure.step);
+                }}
+              >
+                {ac.fix}
+              </button>
+            )}
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setAnalysisRetry((n) => n + 1)}
+            >
+              {ac.retry}
+            </button>
+          </div>
+        ) : analysis ? (
+          <AssessmentReport {...props} />
+        ) : null}
         {savedPath ? (
           <p
             className="report-saved-path"
@@ -193,7 +292,14 @@ export function FinalReport() {
           className="btn btn-primary"
           type="button"
           data-testid="report-export"
-          disabled={loading || exporting || ending}
+          disabled={
+            loading ||
+            analyzing ||
+            !analysis ||
+            !!analysisFailure ||
+            exporting ||
+            ending
+          }
           onClick={() => void exportPdf()}
         >
           {exporting ? c.exporting : c.export}

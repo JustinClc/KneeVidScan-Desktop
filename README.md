@@ -127,4 +127,12 @@ Single package at repo root (`kneevidscan-desktop`):
 
 ### Final report
 
-**Proceed** on Pose Estimation saves each trial’s original videos into the subject folder before opening the report. Failed saves keep the assessment open for retry; temporary copies remain available for review until the assessment ends. The desktop report follows the supplied report sections, using the saved annotated posture images and clearly marked example analysis values. **Export report (PDF)** creates an A4 report in the selected app language, saves it in the subject folder, opens it in the default PDF viewer, and shows the saved path. **End assessment** clears the assessment and returns Home while preserving saved files and paired cameras.
+**Proceed** on Pose Estimation saves each trial’s original videos into the subject folder before opening the report. Failed saves keep the assessment open for retry; temporary copies remain available for review until the assessment ends. The desktop report follows the supplied report sections, using saved annotated posture images and results from the embedded local analysis worker. **Export report (PDF)** creates an A4 report in the selected app language, saves it in the subject folder, opens it in the default PDF viewer, and shows the saved path. **End assessment** clears the assessment and returns Home while preserving saved files and paired cameras.
+
+## Local report analysis
+
+Reports now use an embedded offline analysis worker. Build the native worker
+before `pnpm start`, `package`, or `make`; see [analysis/README.md](analysis/README.md).
+The report and PDF share cached analysis results. Input failures offer correction
+or retake at the relevant assessment step. See [the design notes](docs/local-analysis-design.md)
+for the initial internal-build scoring behavior and validation status.
