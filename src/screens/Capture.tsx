@@ -22,6 +22,7 @@ import {
   type RecordingQualityMode,
 } from '../lib/recordingQuality';
 import { useSession } from '../state/SessionContext';
+import sitToStandDemo from '../assets/motion-demo/sit-to-stand.mp4';
 
 /** Phones keep 15 fps previews while this heartbeat is under the 6 s expiry. */
 const CAPTURE_PREVIEW_HEARTBEAT_MS = 2000;
@@ -615,18 +616,15 @@ export function Capture() {
           {!instructionDone ? (
             <div className="sit-instructions" data-testid="sit-instructions">
               <h1>{t('Sit-to-stand Test')}</h1>
-              <div
+              <video
                 className="sit-instruction-video"
                 data-testid="sit-instruction-video"
-                role="img"
-                aria-label={t('Sit-to-stand instruction video placeholder')}
-              >
-                <span className="sit-play-icon" aria-hidden="true">
-                  ▶
-                </span>
-                <strong>{t('How to perform the sit-to-stand test')}</strong>
-                <span>{t('Instruction video coming soon')}</span>
-              </div>
+                src={sitToStandDemo}
+                controls
+                playsInline
+                preload="metadata"
+                aria-label={t('How to perform the sit-to-stand test')}
+              />
               <p>
                 {t(
                   'Use a stable chair. Sit with your left or right side facing the side-view camera and keep your whole body inside the frame. When recording begins, repeatedly stand up and sit down for 20 seconds.',
